@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2025年7月形态学比赛 - 练习系统</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ========== Left sidebar ========== -->
+    <aside id="sidebar">
+      <nav class="module-switch">
+        <a href="../index.html" title="返回主页">🏠</a>
+        <a href="../练习系统/index.html" class="active">📝 真题练习</a>
+        <a href="../标签库/index.html">🔬 标签库</a>
+      </nav>
+      <div class="sb-hero">
+        <h1>形态学练习系统</h1>
+        <p class="subtitle">2025年7月形态比赛 · 共 160 题</p>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">题库分组</div>
+        <select id="group-select" class="group-select"></select>
+        <label class="check" style="margin-top:10px">
+          <input type="checkbox" id="shuffle-toggle">
+          <span>乱序练习</span>
+        </label>
+        <button class="btn btn-primary block" id="start-all-btn">全部练习</button>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">分类 / 组卷</div>
+        <button class="btn btn-primary block" id="explore-btn">🔬 细胞分类图谱 / 组卷</button>
+        <p class="sb-muted" style="margin-top:6px;font-size:12px">按具体细胞（如 骨髓→红系→早幼红）看图、练习；随机抽题；勾选小类（可全选）自由组卷。已<strong>接入细胞标签库</strong>：树中「标签库·细胞图谱」分支可看图 + 快速测验。</p>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">错题库</div>
+        <p id="wrong-count" class="sb-muted">暂无错题</p>
+        <button class="btn btn-sm block" id="practice-wrong-btn" disabled>练习错题</button>
+        <button class="btn btn-sm btn-ghost block" id="view-wrong-btn" disabled>查看错题</button>
+        <button class="btn btn-sm btn-danger-ghost block" id="clear-wrong-btn" disabled>清空错题</button>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">界面尺寸</div>
+        <div class="size-row">
+          <button class="btn btn-sm size-step" id="size-minus" title="缩小">A−</button>
+          <input type="range" id="size-slider" min="60" max="150" step="5" value="100">
+          <button class="btn btn-sm size-step" id="size-plus" title="放大">A+</button>
+          <span class="size-val" id="size-val">100%</span>
+        </div>
+        <div class="size-presets">
+          <button class="btn btn-sm size-preset" data-scale="0.8">13.6″ 笔记本</button>
+          <button class="btn btn-sm size-preset" data-scale="0.9">15.6″ 笔记本</button>
+          <button class="btn btn-sm size-preset" data-scale="1.15">27″ 大屏</button>
+          <button class="btn btn-sm size-preset" data-scale="1">恢复 100%</button>
+        </div>
+        <button class="btn btn-sm btn-ghost block" id="size-auto-btn" style="margin-top:8px">自动适配当前屏幕</button>
+        <p class="sb-muted" style="margin-top:6px;font-size:12px">放大 / 缩小整个界面，让图片和所有选项不滚动就能看全。</p>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">题库管理</div>
+        <button class="btn btn-sm block" id="manage-btn">添加 / 修改 / 删除题库</button>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">进度</div>
+        <p class="sb-muted" id="stats-line">尚未开始</p>
+        <button class="btn btn-sm btn-ghost block" id="reset-stats-btn">重置统计</button>
+      </div>
+    </aside>
+
+    <!-- ========== Right main area ========== -->
+    <main id="main">
+
+      <!-- Welcome (no session) -->
+      <section id="welcome" class="panel active">
+        <div class="welcome-box">
+          <div class="welcome-icon">📋</div>
+          <h2>欢迎使用形态学练习系统</h2>
+          <p>在左侧选择 <strong>全部练习</strong>、<strong>细胞分类 / 组卷</strong> 或 <strong>错题练习</strong> 开始答题；如果新建了自己的题库，可在左上「题库分组」切换。</p>
+          <ul class="welcome-tips">
+            <li>内置题库：「2025北京市检验医学年会形态学大赛初赛题目」160 题（答案已校对）、「2024北京市检验医学年会形态学大赛初赛题目」160 题</li>
+            <li><strong>注意（2024 题库）</strong>：原文档无标准答案，现用答案为<strong>当时参赛者所选</strong>、未经官方核对，仅供参考；多为正确，但 ANA 核型、真菌分种、细胞分化阶段等需以专业判读为准。仅个别有明确缺陷的题保留 <span class="badge flag" style="vertical-align:middle">⚠</span> 标记。</li>
+            <li>左侧「细胞分类 / 组卷」可按 <strong>具体细胞名称</strong>逐层浏览（如 血细胞·骨髓 → 红系 → 早幼红细胞）、看图、<strong>按类练习</strong>、<strong>随机抽题</strong>，或勾选小类（支持<strong>全选</strong>）<strong>自定义组卷</strong></li>
+            <li><strong>已接入「细胞标签库」</strong>：分类图谱中新增「🧫 标签库·细胞图谱」分支——点「看图」查看某种细胞的全部标注图片（含典型程度、形态解说），点「练习」/勾选「组卷」即按图快速测验</li>
+            <li>「题库管理 → <strong>🔬 从标签库选图建题</strong>」：勾选标签库图片即可<strong>一键生成永久选择题</strong>并存入指定题库（自动配同系列干扰项），生成的题目同时并入分类图谱</li>
+            <li>已校对答案：少量存在拼写错误、术语争议或选项设计歧义的题目，会显示 <span class="badge flag" style="vertical-align:middle">⚠ 答案存疑</span> 红色徽章，点击徽章查看说明</li>
+            <li>选项支持点击作答，单选自动判分，多选需点击「提交答案」；答完会显示正确 / 错误及正确答案</li>
+            <li>答错的题目会自动进入「错题库」（跨分组通用）</li>
+            <li>答题时可使用右侧「题号导航」或「跳转到第 __ 题」快速切换</li>
+            <li>左侧「界面尺寸」可一键适配 13.6″ / 15.6″ / 27″ 屏幕，或点「自动适配当前屏幕」精确缩放</li>
+            <li>可通过左侧「题库管理」新建题库，或<strong>直接编辑内置题库</strong>（改题干/选项/答案、加题、删题）；编辑 2024 题时清空「存疑标记」即可去掉待核对红标</li>
+            <li>自建题库可「导出」为文件，在另一台电脑上「导入」即可迁移与朋友共享</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Quiz -->
+      <section id="quiz" class="panel">
+        <header class="quiz-header">
+          <div class="progress-info">
+            <span id="progress-label">第 0/0 题</span>
+            <span id="category-label" class="tag"></span>
+          </div>
+          <div class="header-right">
+            <div class="score-info">
+              <span class="ok">✓ <span id="correct-count">0</span></span>
+              <span class="bad">✗ <span id="wrong-now-count">0</span></span>
+            </div>
+            <div class="jump-box">
+              <span>跳转到第</span>
+              <input type="number" id="jump-input" min="1" placeholder="#">
+              <span>题</span>
+              <button class="btn btn-sm" id="jump-btn">跳转</button>
+            </div>
+            <button class="btn btn-sm btn-ghost" id="end-session-btn">结束本轮</button>
+          </div>
+        </header>
+
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+
+        <!-- Question navigator (答题卡) -->
+        <div class="qnav-wrap">
+          <button class="qnav-toggle" id="qnav-toggle">题号导航 ▾</button>
+          <div id="qnav" class="qnav"></div>
+        </div>
+
+        <div id="question-card" class="question-card"></div>
+
+        <div class="action-row">
+          <button class="btn btn-ghost" id="prev-btn">← 上一题</button>
+          <button class="btn btn-primary" id="submit-btn" style="display:none">提交答案</button>
+          <button class="btn btn-primary" id="next-btn" style="display:none">下一题 →</button>
+          <button class="btn btn-ghost" id="skip-btn">跳过 →</button>
+        </div>
+      </section>
+
+      <!-- Review (wrong list) -->
+      <section id="review" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px">错题列表</h2>
+          <button class="btn btn-sm btn-ghost" id="review-back-btn">关闭</button>
+        </header>
+        <div id="review-list" class="review-list"></div>
+      </section>
+
+      <!-- Result -->
+      <section id="result" class="panel">
+        <div class="result-card">
+          <h2>本轮练习结束</h2>
+          <div class="result-stats">
+            <div class="stat"><div class="stat-num" id="result-total">0</div><div class="stat-label">总题数</div></div>
+            <div class="stat ok"><div class="stat-num" id="result-correct">0</div><div class="stat-label">答对</div></div>
+            <div class="stat bad"><div class="stat-num" id="result-wrong">0</div><div class="stat-label">答错</div></div>
+            <div class="stat"><div class="stat-num" id="result-rate">0%</div><div class="stat-label">正确率</div></div>
+          </div>
+          <div class="action-row" style="justify-content:center">
+            <button class="btn" id="result-review-btn">查看错题</button>
+            <button class="btn btn-primary" id="result-home-btn">返回</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Manage: list of all groups -->
+      <section id="manage" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px">题库管理</h2>
+          <button class="btn btn-sm btn-ghost" id="manage-close-btn">关闭</button>
+        </header>
+        <p class="sb-muted" style="margin-bottom:14px">内置题库（2024 / 2025）现已<strong>可编辑</strong>：可改题干 / 选项 / 答案、删题、加题，尤其用于修订 2024 待核对答案。所有修改保存在本浏览器；内置题库点「恢复默认」可一键还原。换电脑用「导出 / 导入」迁移。</p>
+        <div class="manage-toolbar">
+          <button class="btn btn-primary" id="new-group-btn">＋ 新建题库</button>
+          <button class="btn btn-primary" id="tb-open-btn">🔬 从标签库选图建题</button>
+          <button class="btn" id="export-all-btn">导出全部自建题库</button>
+          <button class="btn" id="import-btn">导入题库文件</button>
+          <input type="file" id="import-file" accept=".json,application/json" style="display:none">
+        </div>
+        <div id="manage-group-list" class="manage-list"></div>
+      </section>
+
+      <!-- Manage one group: list of its questions -->
+      <section id="manage-group" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px" id="mg-title">题目列表</h2>
+          <div class="header-right">
+            <button class="btn btn-sm" id="mg-from-taglib-btn">🔬 从标签库选图</button>
+            <button class="btn btn-sm" id="mg-add-q-btn">＋ 添加题目</button>
+            <button class="btn btn-sm btn-ghost" id="mg-back-btn">返回</button>
+          </div>
+        </header>
+        <div id="mg-question-list" class="manage-list"></div>
+      </section>
+
+      <!-- Add / edit a question -->
+      <section id="qform" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px" id="qf-title">添加题目</h2>
+          <button class="btn btn-sm btn-ghost" id="qf-cancel-btn">取消</button>
+        </header>
+        <div class="qform-body">
+          <div class="qf-row">
+            <label class="qf-label">所属题库</label>
+            <div id="qf-group-name" class="qf-static"></div>
+          </div>
+          <div class="qf-row">
+            <label class="qf-label" for="qf-category">分类路径（用 / 逐层分隔）</label>
+            <input type="text" id="qf-category" list="qf-category-list" placeholder="如：血细胞·骨髓 / 粒系 / 早幼粒细胞">
+            <datalist id="qf-category-list"></datalist>
+            <div class="qf-hint">可从下拉选已有分类，也可<strong>自建新分类</strong>——直接输入新的层级名即可（用「/」分隔，如 我的分类 / 红系 / 早幼红）。填好后这道题会自动并入「细胞分类图谱」对应的小类。</div>
+          </div>
+          <div class="qf-row">
+            <label class="qf-label" for="qf-question">题干 <span class="req">*</span></label>
+            <textarea id="qf-question" rows="3" placeholder="请输入题目内容"></textarea>
+          </div>
+          <div class="qf-row" id="qf-imgopt-note" style="display:none">
+            <div class="qf-hint" style="color:#92400e;background:#fef3c7;padding:8px 10px;border-radius:8px">本题为「图片选项」题：选项内容是图片，会自动保留。你只需勾选正确选项（修正答案）即可，无需填写选项文字。</div>
+          </div>
+          <div class="qf-row">
+            <label class="qf-label" for="qf-flag">存疑标记（可选）</label>
+            <input type="text" id="qf-flag" placeholder="留空＝无标记；核对无误后清空此栏即可去掉「答案待核对」红标">
+            <div class="qf-hint">填了内容会在题目上显示红色「⚠ 答案存疑」徽章并附此说明；核对正确后清空即可移除标记。</div>
+          </div>
+          <div class="qf-row">
+            <label class="qf-label">题目图片（可选）</label>
+            <div>
+              <input type="file" id="qf-image-file" accept="image/*">
+              <button type="button" class="btn btn-sm btn-ghost" id="qf-image-clear" style="display:none">移除图片</button>
+              <div class="qf-hint">建议单张小于 500KB；图片以内联方式保存，过多可能超出浏览器存储上限。</div>
+              <img id="qf-image-preview" class="qf-img-preview" style="display:none" alt="预览">
+            </div>
+          </div>
+          <div class="qf-row">
+            <label class="qf-label">选项 / 正确答案 <span class="req">*</span></label>
+            <div class="qf-hint">至少填写 A、B 两个选项；勾选正确选项，勾选 2 个及以上即为「不定项选择」。</div>
+            <div class="qf-baseopts">
+              <span class="qf-hint" style="margin:0">快速填入基础选项：</span>
+              <select id="qf-base-template" class="qf-base-select"><option value="">选择一组常见选项…</option></select>
+              <button type="button" class="btn btn-sm" id="qf-base-insert">填入空白选项</button>
+            </div>
+            <div id="qf-options"></div>
+            <div class="qf-autofill">
+              <button type="button" class="btn btn-sm" id="qf-autofill-btn">根据答案添加近似错误选项</button>
+              <span class="qf-hint" style="margin:0">先填好正确选项并勾选「正确」，再点此自动补充形态相近的干扰项（最多补足 4 个选项）。</span>
+            </div>
+          </div>
+          <div class="qf-actions">
+            <button class="btn btn-primary" id="qf-save-btn">保存</button>
+            <button class="btn btn-ghost" id="qf-cancel-btn2">取消</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Explore: fine-grained taxonomy + random + custom test -->
+      <section id="explore" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px" id="explore-title">细胞分类 / 组卷</h2>
+          <button class="btn btn-sm btn-ghost" id="explore-close-btn">关闭</button>
+        </header>
+
+        <div class="explore-scope">
+          <span>范围：</span>
+          <button class="btn btn-sm scope-btn active" data-scope="group">当前题库</button>
+          <button class="btn btn-sm scope-btn" data-scope="all">全部题库（含自建）</button>
+        </div>
+
+        <div class="explore-card">
+          <div class="explore-card-title">🎲 随机测试</div>
+          <p class="qf-hint">从「<span id="rand-group-name">当前题库</span>」（共 <span id="rand-total">0</span> 题）随机抽取题目，自动乱序。</p>
+          <div class="rand-row">
+            <span>抽取</span>
+            <input type="number" id="rand-count" min="1" value="20">
+            <span>题</span>
+            <button class="btn btn-sm" id="rand-10">10</button>
+            <button class="btn btn-sm" id="rand-20">20</button>
+            <button class="btn btn-sm" id="rand-50">50</button>
+            <button class="btn btn-primary" id="rand-start-btn">开始随机测试</button>
+          </div>
+        </div>
+
+        <div class="explore-card" id="explore-tl-hint" style="display:none">
+          <div class="explore-card-title">🧫 标签库题型</div>
+          <p class="qf-hint">树中「<strong>标签库·细胞图谱</strong>」分支来自细胞标签库：点「看图」查看该细胞的所有标注图片，点「练习」或勾选后「组卷」即按下方题型快速测验（图 → 选细胞）。</p>
+          <div class="eqtype-row">
+            <span>标签库题型：</span>
+            <button class="btn btn-sm eqtype-btn active" data-qtype="name">识别具体细胞</button>
+            <button class="btn btn-sm eqtype-btn" data-qtype="series">识别所属系列</button>
+          </div>
+        </div>
+
+        <div class="explore-card">
+          <div class="explore-card-title">🔬 按具体细胞 / 结构浏览</div>
+          <p class="qf-hint">点击 ▸ 展开层级；点「练习」直接练某一类；勾选多个小类后用底部「自定义组卷」组合成一套测试。</p>
+          <div class="tree-toolbar">
+            <button class="btn btn-sm btn-ghost" id="tree-expand-btn">全部展开</button>
+            <button class="btn btn-sm btn-ghost" id="tree-collapse-btn">全部折叠</button>
+            <button class="btn btn-sm" id="tree-selectall-btn">全选</button>
+            <button class="btn btn-sm btn-ghost" id="tree-clear-btn">清空勾选</button>
+          </div>
+          <div id="tree" class="tree"></div>
+        </div>
+
+        <div class="explore-footer" id="explore-footer">
+          <div class="ef-info">已选 <strong id="sel-cat-count">0</strong> 类 · 共 <strong id="sel-q-count">0</strong> 题</div>
+          <label class="check" style="margin:0"><input type="checkbox" id="custom-shuffle" checked><span>乱序</span></label>
+          <span class="ef-limit">限题数 <input type="number" id="custom-limit" min="1" placeholder="全部"></span>
+          <button class="btn btn-primary" id="custom-start-btn" disabled>开始自定义组卷</button>
+        </div>
+      </section>
+
+      <!-- Gallery: all images of one cell/category laid out -->
+      <section id="gallery" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px" id="gallery-title">图谱</h2>
+          <div class="header-right">
+            <button class="btn btn-sm btn-primary" id="gallery-practice-btn">练习这一类</button>
+            <button class="btn btn-sm btn-ghost" id="gallery-back-btn">← 返回分类</button>
+          </div>
+        </header>
+        <p class="qf-hint" id="gallery-sub"></p>
+        <div id="gallery-note" class="gallery-note" style="display:none"></div>
+        <div id="gallery-grid" class="gallery-grid"></div>
+      </section>
+
+      <!-- Build permanent questions from the tag library -->
+      <section id="taglib-build" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px">从标签库选图建题</h2>
+          <button class="btn btn-sm btn-ghost" id="tb-close-btn">关闭</button>
+        </header>
+        <p class="sb-muted" style="margin-bottom:12px">勾选标签库中的图片，系统会按所选题型自动生成选择题（图 → 选细胞，干扰项优先取同系列易混项），并<strong>永久保存</strong>到所选题库；这些题目同时并入「细胞分类图谱」。</p>
+
+        <div class="tb-bar">
+          <div class="tb-bar-row">
+            <span class="tb-label">题型</span>
+            <button class="btn btn-sm tbq-btn active" data-qtype="name">识别具体细胞</button>
+            <button class="btn btn-sm tbq-btn" data-qtype="series">识别所属系列</button>
+          </div>
+          <div class="tb-bar-row">
+            <span class="tb-label">存入题库</span>
+            <select id="tb-group" class="group-select" style="max-width:280px"></select>
+          </div>
+          <div class="tb-bar-row"><span class="tb-label">系列</span><div id="tb-series" class="tb-chips"></div></div>
+          <div class="tb-bar-row"><span class="tb-label">典型程度</span><div id="tb-typ" class="tb-chips"></div></div>
+          <div class="tb-bar-row">
+            <span class="tb-label">符合 <strong id="tb-pool">0</strong> 张</span>
+            <button class="btn btn-sm" id="tb-selectall-btn">全选（当前筛选）</button>
+            <button class="btn btn-sm btn-ghost" id="tb-clear-btn">清空已选</button>
+          </div>
+        </div>
+
+        <div id="tb-grid" class="tb-grid"></div>
+
+        <div class="tb-footer">
+          <div class="ef-info">已选 <strong id="tb-selcount">0</strong> 张图片</div>
+          <button class="btn btn-primary" id="tb-generate-btn" disabled>生成题目并加入题库</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Image viewer modal -->
+  <div id="img-modal" class="modal" onclick="closeImgModal()">
+    <img id="modal-img" alt="放大查看">
+  </div>
+
+  <script src="questions.js"></script>
+  <!-- tag-library data (shared with the 标签库 module); enables 细胞分类图谱 + 从标签库建题 -->
+  <script src="../标签库/entries.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

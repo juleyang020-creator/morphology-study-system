@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>形态学学习系统</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+      background:linear-gradient(160deg,#eef2ff 0%,#f5f7fb 45%,#faf5ff 100%);color:#1f2937;min-height:100vh;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
+    .hub-hero{text-align:center;margin-bottom:36px}
+    .hub-hero h1{font-size:34px;letter-spacing:1px;background:linear-gradient(135deg,#2563eb,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .hub-hero p{color:#6b7280;margin-top:8px;font-size:15px}
+    .cards{display:grid;grid-template-columns:repeat(2,minmax(280px,360px));gap:22px;width:100%;max-width:760px}
+    @media(max-width:680px){.cards{grid-template-columns:1fr}}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:26px;box-shadow:0 4px 24px rgba(0,0,0,.06);
+      text-decoration:none;color:inherit;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
+    .card:hover{transform:translateY(-3px);box-shadow:0 10px 34px rgba(37,99,235,.16);border-color:#c7d2fe}
+    .card .ic{font-size:42px;margin-bottom:12px}
+    .card h2{font-size:21px;margin-bottom:8px}
+    .card p{color:#6b7280;font-size:14px;line-height:1.7;flex:1}
+    .card .tags{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
+    .card .tags span{background:#eef2ff;color:#2563eb;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:600}
+    .card .enter{margin-top:16px;align-self:flex-start;background:#2563eb;color:#fff;border-radius:9px;padding:9px 20px;font-weight:600;font-size:14px}
+    .card.lib .enter{background:#7c3aed}
+    .card.lib .tags span{background:#f3e8ff;color:#7c3aed}
+    .hub-foot{margin-top:32px;color:#9ca3af;font-size:13px;text-align:center;max-width:620px;line-height:1.7}
+  </style>
+</head>
+<body>
+  <div class="hub-hero">
+    <h1>形态学学习系统</h1>
+    <p>真题练习 + 细胞标签库，二合一</p>
+  </div>
+  <div class="cards">
+    <a class="card practice" href="练习系统/index.html">
+      <div class="ic">📝</div>
+      <h2>真题练习</h2>
+      <p>2024 / 2025 北京市检验医学年会形态学大赛初赛题目，共 320 道带图真题。按细胞分类浏览、随机抽题、自定义组卷、错题库，支持自建题库与编辑。</p>
+      <div class="tags"><span>320 真题</span><span>分类·组卷</span><span>错题库</span></div>
+      <span class="enter">进入练习 →</span>
+    </a>
+    <a class="card lib" href="标签库/index.html">
+      <div class="ic">🔬</div>
+      <h2>细胞标签库</h2>
+      <p>带 9 项标签的形态学图片数据库（编号·来源·分类·子分类·标签·典型程度·疾病·解说）。可上传图片入库、多维筛选检索，并从库中自动出题、随机测验。</p>
+      <div class="tags"><span>图片数据库</span><span>上传标注</span><span>从库出题</span></div>
+      <span class="enter">进入标签库 →</span>
+    </a>
+  </div>
+  <div class="hub-foot">两个模块各自独立保存数据；进入任一模块后，可在左侧顶部「模块切换」一键回到本页或切换到另一模块。</div>
+</body>
+</html>

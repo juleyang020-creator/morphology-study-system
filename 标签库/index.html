@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>形态学标签库</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ========== Sidebar ========== -->
+    <aside id="sidebar">
+      <nav class="module-switch">
+        <a href="../index.html" title="返回主页">🏠</a>
+        <a href="../练习系统/index.html">📝 真题练习</a>
+        <a href="../标签库/index.html" class="active">🔬 标签库</a>
+      </nav>
+      <div class="sb-hero">
+        <h1>形态学标签库</h1>
+        <p class="subtitle" id="sb-subtitle">— 张图片</p>
+      </div>
+
+      <div class="sb-section">
+        <button class="btn btn-primary block" id="nav-db">📚 浏览数据库</button>
+        <button class="btn block" id="nav-add">＋ 添加 / 上传图片</button>
+        <button class="btn block" id="nav-taxo">🗂 分类管理（增加分类 / 子分类）</button>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">从数据库组题</div>
+        <button class="btn btn-primary block" id="nav-quizsetup">🧪 出题 / 组卷</button>
+        <div class="quick-rand">
+          <span>随机</span>
+          <input type="number" id="quick-rand-n" min="1" value="20">
+          <span>题</span>
+          <button class="btn btn-sm" id="quick-rand-go">开始</button>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">错题库</div>
+        <p id="wrong-count" class="sb-muted">暂无错题</p>
+        <button class="btn btn-sm block" id="practice-wrong-btn" disabled>练习错题</button>
+        <button class="btn btn-sm btn-ghost block" id="view-wrong-btn" disabled>查看错题</button>
+        <button class="btn btn-sm btn-danger-ghost block" id="clear-wrong-btn" disabled>清空错题</button>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">界面尺寸</div>
+        <div class="size-row">
+          <button class="btn btn-sm size-step" id="size-minus">A−</button>
+          <input type="range" id="size-slider" min="60" max="150" step="5" value="100">
+          <button class="btn btn-sm size-step" id="size-plus">A+</button>
+          <span class="size-val" id="size-val">100%</span>
+        </div>
+        <div class="size-presets">
+          <button class="btn btn-sm size-preset" data-scale="0.8">13″</button>
+          <button class="btn btn-sm size-preset" data-scale="0.9">15″</button>
+          <button class="btn btn-sm size-preset" data-scale="1.15">27″</button>
+          <button class="btn btn-sm size-preset" data-scale="1">100%</button>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-title">数据管理</div>
+        <button class="btn btn-sm block" id="export-btn">导出数据库（备份）</button>
+        <button class="btn btn-sm block" id="import-btn">导入数据库</button>
+        <input type="file" id="import-file" accept=".json,application/json" style="display:none">
+        <button class="btn btn-sm btn-danger-ghost block" id="reset-btn">恢复内置默认</button>
+        <p class="sb-muted" id="stats-line" style="margin-top:8px">尚未答题</p>
+      </div>
+    </aside>
+
+    <!-- ========== Main ========== -->
+    <main id="main">
+
+      <!-- Database browser -->
+      <section id="db" class="panel active">
+        <header class="db-header">
+          <h2>数据库 <span id="db-count" class="muted-num"></span></h2>
+          <div class="db-tools">
+            <input type="search" id="db-search" placeholder="搜索 分类 / 标签 / 解说 / 疾病 / 来源…">
+            <div class="view-toggle">
+              <button class="vt-btn active" id="view-gallery">画廊</button>
+              <button class="vt-btn" id="view-table">表格</button>
+            </div>
+          </div>
+        </header>
+        <div id="db-filters" class="db-filters"></div>
+        <div id="db-active-filters" class="db-active-filters"></div>
+        <div id="db-body"></div>
+      </section>
+
+      <!-- Entry detail -->
+      <section id="detail" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px" id="detail-title">条目详情</h2>
+          <div class="header-right">
+            <button class="btn btn-sm" id="detail-edit">编辑</button>
+            <button class="btn btn-sm btn-danger-ghost" id="detail-delete">删除</button>
+            <button class="btn btn-sm btn-ghost" id="detail-back">← 返回</button>
+          </div>
+        </header>
+        <div id="detail-body" class="detail-body"></div>
+      </section>
+
+      <!-- Add / edit form -->
+      <section id="form" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px" id="form-title">添加图片条目</h2>
+          <button class="btn btn-sm btn-ghost" id="form-cancel">取消</button>
+        </header>
+        <div class="form-body">
+          <div class="frow">
+            <label class="flabel">图片 <span class="req">*</span></label>
+            <div class="fimg-wrap">
+              <input type="file" id="f-image" accept="image/*">
+              <button type="button" class="btn btn-sm btn-ghost" id="f-image-clear" style="display:none">移除图片</button>
+              <div class="fhint">可一次选择多张连续添加（仅首张进入本表单，其余排队）。建议单张 &lt; 800KB。</div>
+              <img id="f-image-preview" class="fimg-preview" style="display:none" alt="预览">
+              <div id="f-queue" class="fqueue"></div>
+            </div>
+          </div>
+          <div class="fgrid">
+            <div class="frow">
+              <label class="flabel" for="f-source">来源</label>
+              <input type="text" id="f-source" list="dl-source" placeholder="如 患者编号 / 玻片号">
+              <datalist id="dl-source"></datalist>
+            </div>
+            <div class="frow">
+              <label class="flabel" for="f-typicality">典型程度</label>
+              <input type="text" id="f-typicality" list="dl-typicality" placeholder="典型 / 一般 / 不典型 / 较难鉴别">
+              <datalist id="dl-typicality"></datalist>
+            </div>
+            <div class="frow">
+              <label class="flabel" for="f-category">分类 <span class="req">*</span></label>
+              <input type="text" id="f-category" list="dl-category" placeholder="如 N2a_中性中幼粒细胞（编码_名称）">
+              <datalist id="dl-category"></datalist>
+              <div class="fhint">建议用「编码_名称」，编码首字母决定所属系列（N粒系 / R红系 / M单核 / L淋巴 / J浆细胞 / P巨核·血小板 / 0原始）。</div>
+            </div>
+            <div class="frow">
+              <label class="flabel" for="f-subcategory">子分类</label>
+              <input type="text" id="f-subcategory" list="dl-subcategory" placeholder="如 小淋巴细胞 / 涂抹细胞">
+              <datalist id="dl-subcategory"></datalist>
+            </div>
+            <div class="frow">
+              <label class="flabel" for="f-disease">疾病</label>
+              <input type="text" id="f-disease" list="dl-disease" placeholder="可留空">
+              <datalist id="dl-disease"></datalist>
+            </div>
+            <div class="frow">
+              <label class="flabel" for="f-tags">其他标签</label>
+              <input type="text" id="f-tags" placeholder="多个标签用逗号分隔，如 中毒颗粒, 双核">
+            </div>
+          </div>
+          <div class="frow">
+            <label class="flabel" for="f-explanation">解说</label>
+            <textarea id="f-explanation" rows="3" placeholder="形态描述、鉴别要点、判读说明…"></textarea>
+          </div>
+          <div class="factions">
+            <button class="btn btn-primary" id="form-save">保存条目</button>
+            <button class="btn" id="form-save-next" style="display:none">保存并填下一张</button>
+            <button class="btn btn-ghost" id="form-cancel2">取消</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Taxonomy manager -->
+      <section id="taxo" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px">分类管理</h2>
+          <button class="btn btn-sm btn-ghost" id="taxo-back">关闭</button>
+        </header>
+        <p class="sb-muted" style="margin-bottom:14px">在这里增加 / 删除「具体分类」和「子分类」。新增后会自动出现在「添加 / 上传图片」表单的下拉选项里、以及数据库筛选中（暂无图片时计为 0 图）。<strong>删除任意分类后，原本归在该分类下的图片会自动移到「未分类」</strong>（删除子分类则清空其子分类标签）；内置图片之后可用「恢复内置默认」找回。</p>
+        <div class="taxo-cols">
+          <div class="taxo-col">
+            <div class="setup-title">具体分类（编码_名称）</div>
+            <div class="taxo-add">
+              <input type="text" id="taxo-cat-input" placeholder="如 L3_大颗粒淋巴细胞">
+              <button class="btn btn-primary btn-sm" id="taxo-cat-add">添加</button>
+            </div>
+            <div class="fhint" id="taxo-cat-series" style="min-height:18px;color:#3730a3"></div>
+            <div class="fhint">编码首字母决定所属系列：N 粒系 / R 红系 / M 单核 / L 淋巴 / J 浆细胞 / P 巨核·血小板 / 0 原始；不带编码则归「其他」。</div>
+            <div id="taxo-cat-list" class="taxo-list"></div>
+          </div>
+          <div class="taxo-col">
+            <div class="setup-title">子分类</div>
+            <div class="taxo-add">
+              <input type="text" id="taxo-sub-input" placeholder="如 小淋巴细胞 / 涂抹细胞">
+              <button class="btn btn-primary btn-sm" id="taxo-sub-add">添加</button>
+            </div>
+            <div class="fhint">子分类是对「具体分类」的进一步细分，可在添加图片时填写。</div>
+            <div id="taxo-sub-list" class="taxo-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quiz setup -->
+      <section id="quizsetup" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px">出题 / 组卷</h2>
+          <button class="btn btn-sm btn-ghost" id="quizsetup-back">关闭</button>
+        </header>
+
+        <div class="setup-card">
+          <div class="setup-title">① 题型</div>
+          <div class="seg" id="qtype-seg">
+            <button class="seg-btn active" data-qtype="name">识别具体细胞（标准）</button>
+            <button class="seg-btn" data-qtype="series">识别所属系列（简单）</button>
+          </div>
+          <p class="fhint" id="qtype-hint">看图选出该细胞的<strong>具体分类</strong>（如 中性中幼粒细胞）。干扰项优先取同系列易混项。</p>
+        </div>
+
+        <div class="setup-card">
+          <div class="setup-title">② 范围（可多选筛选，留空＝全部）</div>
+          <div class="setup-row"><span class="setup-label">系列</span><div id="setup-series" class="chip-row"></div></div>
+          <div class="setup-row"><span class="setup-label">典型程度</span><div id="setup-typicality" class="chip-row"></div></div>
+          <div class="setup-row"><span class="setup-label">具体分类</span><div id="setup-category" class="chip-row chip-row-wrap"></div></div>
+          <p class="fhint" id="setup-count-hint">符合条件：<strong id="setup-pool">0</strong> 张图片可出题</p>
+        </div>
+
+        <div class="setup-card">
+          <div class="setup-title">③ 出题数量</div>
+          <div class="setup-row">
+            <span>抽取</span>
+            <input type="number" id="setup-n" min="1" value="20">
+            <span>题</span>
+            <button class="btn btn-sm" id="setup-n-all">全部</button>
+            <label class="check" style="margin:0 0 0 12px"><input type="checkbox" id="setup-shuffle" checked><span>乱序</span></label>
+          </div>
+        </div>
+
+        <div class="setup-footer">
+          <button class="btn btn-primary big" id="setup-start">开始测验</button>
+        </div>
+      </section>
+
+      <!-- Quiz runner -->
+      <section id="quiz" class="panel">
+        <header class="quiz-header">
+          <div class="progress-info">
+            <span id="q-progress">第 0/0 题</span>
+            <span id="q-label" class="tag"></span>
+          </div>
+          <div class="header-right">
+            <div class="score-info"><span class="ok">✓ <span id="q-correct">0</span></span><span class="bad">✗ <span id="q-wrong">0</span></span></div>
+            <div class="jump-box"><span>跳转</span><input type="number" id="q-jump" min="1"><button class="btn btn-sm" id="q-jump-btn">Go</button></div>
+            <button class="btn btn-sm btn-ghost" id="q-end">结束本轮</button>
+          </div>
+        </header>
+        <div class="progress-bar"><div id="q-fill"></div></div>
+        <div class="qnav-wrap"><button class="qnav-toggle" id="qnav-toggle">题号导航 ▾</button><div id="qnav" class="qnav"></div></div>
+        <div id="q-card" class="question-card"></div>
+        <div class="action-row">
+          <button class="btn btn-ghost" id="q-prev">← 上一题</button>
+          <button class="btn btn-primary" id="q-next" style="display:none">下一题 →</button>
+          <button class="btn btn-ghost" id="q-skip">跳过 →</button>
+        </div>
+      </section>
+
+      <!-- Result -->
+      <section id="result" class="panel">
+        <div class="result-card">
+          <h2>本轮测验结束</h2>
+          <div class="result-stats">
+            <div class="stat"><div class="stat-num" id="r-total">0</div><div class="stat-label">总题数</div></div>
+            <div class="stat ok"><div class="stat-num" id="r-correct">0</div><div class="stat-label">答对</div></div>
+            <div class="stat bad"><div class="stat-num" id="r-wrong">0</div><div class="stat-label">答错</div></div>
+            <div class="stat"><div class="stat-num" id="r-rate">0%</div><div class="stat-label">正确率</div></div>
+          </div>
+          <div class="action-row" style="justify-content:center">
+            <button class="btn" id="r-review">查看错题</button>
+            <button class="btn btn-primary" id="r-home">返回数据库</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Wrong review -->
+      <section id="review" class="panel">
+        <header class="quiz-header">
+          <h2 style="margin:0;font-size:18px">错题列表</h2>
+          <button class="btn btn-sm btn-ghost" id="review-back">关闭</button>
+        </header>
+        <div id="review-list" class="review-list"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="img-modal" class="modal" role="dialog" aria-modal="true" aria-label="放大图片" onclick="closeImgModal()">
+    <button id="img-modal-close" type="button" class="img-modal-close" aria-label="关闭" onclick="event.stopPropagation();closeImgModal()">×</button>
+    <img id="modal-img" alt="放大">
+  </div>
+
+  <script src="entries.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
