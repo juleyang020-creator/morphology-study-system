@@ -50,6 +50,8 @@
   function loadUIScale() {
     const raw = localStorage.getItem(STORAGE_UI_SCALE);
     if (raw === null) {
+      // phones: natural size (layout reflows via CSS; the whole-UI zoom is desktop-only)
+      if (window.innerWidth <= 768) return 1;
       // sensible first-launch default based on the current viewport height
       const h = window.innerHeight;
       const def = h >= 1280 ? 1.1 : h >= 1080 ? 1 : h >= 900 ? 0.92 : 0.82;
@@ -57,6 +59,9 @@
     }
     return clampScale(parseFloat(raw) || 1);
   }
+  // mobile drawer sidebar
+  function closeDrawer() { const a = document.getElementById('app'); if (a) a.classList.remove('drawer-open'); }
+  function toggleDrawer() { const a = document.getElementById('app'); if (a) a.classList.toggle('drawer-open'); }
   function saveUIScale(v) { localStorage.setItem(STORAGE_UI_SCALE, String(v)); }
   function applyUIScale(v) {
     v = clampScale(v);
@@ -182,6 +187,7 @@
     document.getElementById(panelId).classList.add('active');
     document.getElementById('main').scrollTop = 0;
     window.scrollTo(0, 0);
+    closeDrawer();   // on phones, navigating closes the drawer so the result is visible
   }
 
   // ---------- Sidebar ----------
@@ -1759,10 +1765,18 @@
 
   // ---------- Events ----------
   function bindEvents() {
+    // mobile drawer
+    const dt = document.getElementById('drawer-toggle');
+    if (dt) dt.onclick = toggleDrawer;
+    const bd = document.getElementById('drawer-backdrop');
+    if (bd) bd.onclick = closeDrawer;
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
     document.getElementById('group-select').onchange = (e) => {
       state.activeGroup = e.target.value;
       state.currentCategory = null;
       updateStartAllBtn();
+      closeDrawer();
     };
     document.getElementById('start-all-btn').onclick = () => startSession({ label: `${state.activeGroup} · 全部练习` });
     document.getElementById('practice-wrong-btn').onclick = () => {

@@ -8,6 +8,12 @@
 </head>
 <body>
   <div id="app">
+    <!-- mobile top bar (shown only on phones) -->
+    <div class="mobile-topbar">
+      <button class="drawer-toggle" id="drawer-toggle" type="button" aria-label="打开菜单">☰</button>
+      <span class="mtb-title">形态学标签库</span>
+    </div>
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
     <!-- ========== Sidebar ========== -->
     <aside id="sidebar">
       <nav class="module-switch">
@@ -45,7 +51,7 @@
         <button class="btn btn-sm btn-danger-ghost block" id="clear-wrong-btn" disabled>清空错题</button>
       </div>
 
-      <div class="sb-section">
+      <div class="sb-section sb-size">
         <div class="sb-title">界面尺寸</div>
         <div class="size-row">
           <button class="btn btn-sm size-step" id="size-minus">A−</button>

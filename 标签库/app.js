@@ -83,7 +83,7 @@
     _modalReturnFocus = null;
   };
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('img-modal').classList.contains('show')) { e.stopPropagation(); window.closeImgModal(); } });
-  function showPanel(id) { document.querySelectorAll('.panel').forEach(p => p.classList.remove('active')); const panel = document.getElementById(id); panel.classList.add('active'); document.getElementById('main').scrollTop = 0; window.scrollTo(0, 0); if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); }
+  function showPanel(id) { document.querySelectorAll('.panel').forEach(p => p.classList.remove('active')); const panel = document.getElementById(id); panel.classList.add('active'); document.getElementById('main').scrollTop = 0; window.scrollTo(0, 0); closeDrawer(); if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll: true }); }
   // set a hint string that may contain one **bold** segment, DOM-safely
   function setHint(node, str) {
     node.textContent = '';
@@ -140,7 +140,10 @@
   const clampScale = (v) => Math.max(0.6, Math.min(1.5, Number(v) || 1));
   function applyScale(v) { v = clampScale(v); document.documentElement.style.setProperty('--ui-scale', v); const s = document.getElementById('size-slider'), val = document.getElementById('size-val'); if (s) s.value = Math.round(v * 100); if (val) val.textContent = Math.round(v * 100) + '%'; return v; }
   function setScale(v) { const c = applyScale(v); lsSet(K.scale, c); }
-  function loadScale() { const raw = localStorage.getItem(K.scale); if (raw == null) { const h = window.innerHeight; return clampScale(h >= 1280 ? 1.1 : h >= 1080 ? 1 : h >= 900 ? 0.92 : 0.82); } return clampScale(parseFloat(raw) || 1); }
+  function loadScale() { const raw = localStorage.getItem(K.scale); if (raw == null) { if (window.innerWidth <= 768) return 1; const h = window.innerHeight; return clampScale(h >= 1280 ? 1.1 : h >= 1080 ? 1 : h >= 900 ? 0.92 : 0.82); } return clampScale(parseFloat(raw) || 1); }
+  // mobile drawer sidebar
+  function closeDrawer() { const a = document.getElementById('app'); if (a) a.classList.remove('drawer-open'); }
+  function toggleDrawer() { const a = document.getElementById('app'); if (a) a.classList.toggle('drawer-open'); }
 
   // ============================ Sidebar refresh ============================
   function refreshSidebar() {
@@ -733,6 +736,13 @@
 
   // ============================ Events ============================
   function bind() {
+    // mobile drawer
+    const dt = document.getElementById('drawer-toggle');
+    if (dt) dt.onclick = toggleDrawer;
+    const bd = document.getElementById('drawer-backdrop');
+    if (bd) bd.onclick = closeDrawer;
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
     document.getElementById('nav-db').onclick = () => { renderDB(); showPanel('db'); };
     document.getElementById('nav-add').onclick = () => openForm(null);
     document.getElementById('nav-taxo').onclick = openTaxo;
