@@ -2,8 +2,17 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>形态学学习系统</title>
+  <!-- PWA / 加到主屏幕 -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="形态学">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
@@ -26,6 +35,13 @@
     .card.lib .enter{background:#7c3aed}
     .card.lib .tags span{background:#f3e8ff;color:#7c3aed}
     .hub-foot{margin-top:32px;color:#9ca3af;font-size:13px;text-align:center;max-width:620px;line-height:1.7}
+    #pwa-install{margin-top:26px;display:none}
+    #pwa-install-btn{background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;border:none;border-radius:12px;
+      padding:13px 26px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 6px 20px rgba(37,99,235,.28)}
+    #pwa-install-btn:active{transform:translateY(1px)}
+    #pwa-ios-hint{margin-top:22px;display:none;background:#fff;border:1px solid #e5e7eb;border-radius:12px;
+      padding:12px 16px;max-width:520px;font-size:13.5px;color:#374151;line-height:1.7;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.05)}
+    #pwa-ios-hint b{color:#2563eb}
   </style>
 </head>
 <body>
@@ -49,6 +65,41 @@
       <span class="enter">进入标签库 →</span>
     </a>
   </div>
-  <div class="hub-foot">两个模块各自独立保存数据；进入任一模块后，可在左侧顶部「模块切换」一键回到本页或切换到另一模块。</div>
+  <div id="pwa-install"><button id="pwa-install-btn" type="button">📲 安装到主屏幕</button></div>
+  <div id="pwa-ios-hint">📱 在 Safari 中点底部 <b>分享</b> 按钮 → 选择 <b>「添加到主屏幕」</b>，即可像 App 一样从桌面打开、离线使用。</div>
+  <div class="hub-foot">两个模块各自独立保存数据；进入任一模块后，可在左侧顶部「模块切换」一键回到本页或切换到另一模块。安装到主屏幕后可离线使用。</div>
+
+  <script>
+    // register service worker (offline support)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+    // Android / desktop Chrome: custom install button
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('pwa-install').style.display = 'block';
+    });
+    document.getElementById('pwa-install-btn').addEventListener('click', function () {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.finally(function () {
+        deferredPrompt = null;
+        document.getElementById('pwa-install').style.display = 'none';
+      });
+    });
+    window.addEventListener('appinstalled', function () {
+      document.getElementById('pwa-install').style.display = 'none';
+    });
+    // iOS Safari: no install prompt → show manual hint (unless already installed)
+    (function () {
+      var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (isIOS && !standalone) document.getElementById('pwa-ios-hint').style.display = 'block';
+    })();
+  </script>
 </body>
 </html>
