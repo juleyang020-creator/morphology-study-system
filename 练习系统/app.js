@@ -44,6 +44,7 @@
   const STORAGE_UI_SCALE = 'morphology_ui_scale_v1';
   const STORAGE_OVERRIDES = 'morphology_q_overrides_v1';  // edits to built-in questions {id: q}
   const STORAGE_DELETED = 'morphology_q_deleted_v1';      // deleted built-in question ids [..]
+  const STORAGE_SESSION = 'morphology_session_v1';        // in-progress practice session (for resume)
 
   const UI_SCALE_MIN = 0.6, UI_SCALE_MAX = 1.5;
   function clampScale(v) { v = Number(v); if (!isFinite(v)) return 1; return Math.max(UI_SCALE_MIN, Math.min(UI_SCALE_MAX, v)); }
@@ -188,6 +189,7 @@
     document.getElementById('main').scrollTop = 0;
     window.scrollTo(0, 0);
     closeDrawer();   // on phones, navigating closes the drawer so the result is visible
+    if (panelId === 'welcome') renderResumeUI();
   }
 
   // ---------- Sidebar ----------
@@ -373,6 +375,78 @@
       : `累计答题 ${stats.answered}，答对 ${stats.correct}，正确率 ${Math.round(stats.correct / stats.answered * 100)}%`;
   }
 
+  // ---------- Session persistence (resume where you left off) ----------
+  function saveSession() {
+    const qs = state.sessionQuestions;
+    if (!qs || !qs.length) return;
+    const data = {
+      version: 1,
+      savedAt: Date.now(),
+      label: state.sessionLabel,
+      mode: state.mode,
+      currentIdx: state.currentIdx,
+      currentCategory: state.currentCategory || null,
+      results: state.results,
+      // real questions → id refs (no data duplication); generated 标签库 questions → saved whole
+      questions: qs.map(q => (q._ephemeral ? { e: q } : { id: q.id })),
+    };
+    try { localStorage.setItem(STORAGE_SESSION, JSON.stringify(data)); } catch (e) { /* storage full: skip */ }
+  }
+  function loadSession() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); } catch (e) { return null; }
+  }
+  function clearSession() { localStorage.removeItem(STORAGE_SESSION); }
+
+  // meaningful progress worth resuming? (answered something or moved past Q1)
+  function sessionProgress(saved) {
+    if (!saved || !Array.isArray(saved.questions) || !saved.questions.length) return null;
+    const total = saved.questions.length;
+    const answered = saved.results ? Object.keys(saved.results).length : 0;
+    const idx = Math.min(saved.currentIdx || 0, total - 1);
+    if (answered === 0 && idx === 0) return null;
+    return { total, answered, idx, label: saved.label || '上次练习' };
+  }
+
+  function restoreSession(saved) {
+    if (!saved || !Array.isArray(saved.questions)) { clearSession(); renderResumeUI(); return; }
+    const byId = new Map(state.allQuestions.map(q => [q.id, q]));
+    const qs = [];
+    saved.questions.forEach(item => {
+      if (item && item.e) qs.push(item.e);
+      else if (item && item.id != null && byId.has(item.id)) qs.push(byId.get(item.id));
+    });
+    if (!qs.length) { alert('上次练习的题目已不存在，无法继续。'); clearSession(); renderResumeUI(); return; }
+    // keep only results belonging to questions still present (accurate score)
+    const present = new Set(qs.map(q => String(q.id)));
+    const results = {};
+    Object.keys(saved.results || {}).forEach(k => { if (present.has(k)) results[k] = saved.results[k]; });
+    state.sessionQuestions = qs;
+    state.results = results;
+    state.mode = saved.mode || 'practice';
+    state.sessionLabel = saved.label || '继续练习';
+    state.currentCategory = saved.currentCategory || null;
+    state.currentIdx = Math.max(0, Math.min(saved.currentIdx || 0, qs.length - 1));
+    state.submitted = false;
+    showPanel('quiz');
+    renderQnav();
+    renderQuestion();
+  }
+
+  // show / hide the "继续上次练习" affordances (sidebar section + welcome banner)
+  function renderResumeUI() {
+    const p = sessionProgress(loadSession());
+    const sec = document.getElementById('resume-section');
+    const banner = document.getElementById('resume-banner');
+    if (!p) {
+      if (sec) sec.style.display = 'none';
+      if (banner) banner.style.display = 'none';
+      return;
+    }
+    const txt = `${p.label} · 第 ${p.idx + 1}/${p.total} 题（已答 ${p.answered}）`;
+    if (sec) { sec.style.display = 'block'; const pr = document.getElementById('resume-progress'); if (pr) pr.textContent = txt; }
+    if (banner) { banner.style.display = 'flex'; const bt = document.getElementById('resume-banner-text'); if (bt) bt.textContent = txt; }
+  }
+
   // ---------- Session ----------
   function startSession({ category = null, ids = null, pool = null, label = null, mode = 'practice', shuffle: forceShuffle = false } = {}) {
     let qs;
@@ -406,6 +480,7 @@
     showPanel('quiz');
     renderQnav();
     renderQuestion();
+    saveSession();
   }
 
   function counts() {
@@ -438,6 +513,7 @@
     state.currentIdx = idx;
     renderQuestion();
     renderQnav();
+    saveSession();
   }
 
   // ---------- Render a question ----------
@@ -623,6 +699,7 @@
     renderQnav();
     refreshWrongUI();
     refreshStatsUI();
+    saveSession();
   }
 
   function nextQuestion() {
@@ -630,12 +707,14 @@
     state.currentIdx += 1;
     renderQuestion();
     renderQnav();
+    saveSession();
   }
   function prevQuestion() {
     if (state.currentIdx === 0) return;
     state.currentIdx -= 1;
     renderQuestion();
     renderQnav();
+    saveSession();
   }
 
   function finishSession() {
@@ -647,6 +726,7 @@
     document.getElementById('result-correct').textContent = cs.correct;
     document.getElementById('result-wrong').textContent = cs.wrong;
     document.getElementById('result-rate').textContent = rate + '%';
+    clearSession();          // round finished → nothing to resume
     showPanel('result');
     refreshStatsUI();
     refreshWrongUI();
@@ -1772,6 +1852,12 @@
     if (bd) bd.onclick = closeDrawer;
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
+    // resume last session
+    const resumeGo = () => { const s = loadSession(); if (s) restoreSession(s); else renderResumeUI(); };
+    const resumeDiscard = () => { if (confirm('确认放弃上次练习进度？')) { clearSession(); renderResumeUI(); } };
+    ['resume-btn', 'resume-banner-continue'].forEach(id => { const b = document.getElementById(id); if (b) b.onclick = resumeGo; });
+    ['resume-discard', 'resume-banner-discard'].forEach(id => { const b = document.getElementById(id); if (b) b.onclick = resumeDiscard; });
+
     document.getElementById('group-select').onchange = (e) => {
       state.activeGroup = e.target.value;
       state.currentCategory = null;
@@ -1794,7 +1880,7 @@
       if (confirm('确认重置所有答题统计？')) { saveStats({ answered: 0, correct: 0 }); refreshStatsUI(); }
     };
     document.getElementById('end-session-btn').onclick = () => {
-      if (confirm('确认结束本轮练习？')) { finishSession(); }
+      if (confirm('确认结束本轮练习？')) { finishSession(); }   // shows score summary + clears resume
     };
     document.getElementById('review-back-btn').onclick = () => { state.currentCategory = null; highlightSidebarCategory(); showPanel('welcome'); };
 
@@ -1925,6 +2011,7 @@
     rebuildData();
     renderSidebar();
     bindEvents();
+    renderResumeUI();   // offer "继续上次练习" if a session was in progress
   }
 
   init();

@@ -33,6 +33,13 @@
         <p class="subtitle">2025年7月形态比赛 · 共 160 题</p>
       </div>
 
+      <div class="sb-section" id="resume-section" style="display:none">
+        <div class="sb-title">继续练习</div>
+        <button class="btn btn-primary block" id="resume-btn">▶ 继续上次练习</button>
+        <p class="sb-muted" id="resume-progress" style="margin-top:6px;font-size:12px"></p>
+        <button class="btn btn-sm btn-ghost block" id="resume-discard">放弃进度</button>
+      </div>
+
       <div class="sb-section">
         <div class="sb-title">题库分组</div>
         <select id="group-select" class="group-select"></select>
@@ -92,11 +99,22 @@
 
       <!-- Welcome (no session) -->
       <section id="welcome" class="panel active">
+        <div id="resume-banner" class="resume-banner" style="display:none">
+          <div class="rb-info">
+            <div class="rb-title">▶ 继续上次练习</div>
+            <div class="rb-sub" id="resume-banner-text"></div>
+          </div>
+          <div class="rb-actions">
+            <button class="btn btn-primary" id="resume-banner-continue">继续</button>
+            <button class="btn btn-sm btn-ghost" id="resume-banner-discard">放弃</button>
+          </div>
+        </div>
         <div class="welcome-box">
           <div class="welcome-icon">📋</div>
           <h2>欢迎使用形态学练习系统</h2>
           <p>在左侧选择 <strong>全部练习</strong>、<strong>细胞分类 / 组卷</strong> 或 <strong>错题练习</strong> 开始答题；如果新建了自己的题库，可在左上「题库分组」切换。</p>
           <ul class="welcome-tips">
+            <li><strong>进度自动保存</strong>：练习过程会自动记住做到第几题、答对答错；下次打开在左侧或本页顶部点「▶ 继续上次练习」即可从上次的位置接着做，不用从头开始</li>
             <li>内置题库：「2025北京市检验医学年会形态学大赛初赛题目」160 题（答案已校对）、「2024北京市检验医学年会形态学大赛初赛题目」160 题</li>
             <li><strong>注意（2024 题库）</strong>：原文档无标准答案，现用答案为<strong>当时参赛者所选</strong>、未经官方核对，仅供参考；多为正确，但 ANA 核型、真菌分种、细胞分化阶段等需以专业判读为准。仅个别有明确缺陷的题保留 <span class="badge flag" style="vertical-align:middle">⚠</span> 标记。</li>
             <li>左侧「细胞分类 / 组卷」可按 <strong>具体细胞名称</strong>逐层浏览（如 血细胞·骨髓 → 红系 → 早幼红细胞）、看图、<strong>按类练习</strong>、<strong>随机抽题</strong>，或勾选小类（支持<strong>全选</strong>）<strong>自定义组卷</strong></li>
