@@ -1,6 +1,37 @@
 (function() {
   'use strict';
 
+  // ==== MorphShared 别名（共用工具 / 跨模块存储 key） ====
+  const S = window.MorphShared;
+  const el = S.el;
+  const shuffle = S.shuffle;
+  const toast = S.toast;
+  const openImgModal = S.openImgModal;
+  const closeImgModal = S.closeImgModal;
+  const isSafeImgPath = S.isSafeImgPath;
+  const clampScale = S.clampScale;
+  const loadScale = S.loadScale;
+  const saveScale = S.saveScale;
+  const applyScale = S.applyScale;
+  const setScale = S.setScale;
+  const registerServiceWorker = S.registerServiceWorker;
+  const closeDrawer = S.closeDrawer;
+  const toggleDrawer = S.toggleDrawer;
+  // showPanel 本模块需要额外渲染 resume UI，下面有本地包装
+  const sharedShowPanel = S.showPanel;
+  const K = S.KEYS;
+  // 兼容旧字段名（不直接复用，保留以便后续逐步替换）
+  const STORAGE_WRONG = K.quizWrong;
+  const STORAGE_STATS = K.quizStats;
+  const STORAGE_USER_GROUPS = K.quizUserGroups;
+  const STORAGE_USER_QUESTIONS = K.quizUserQuestions;
+  const STORAGE_OVERRIDES = K.quizOverrides;
+  const STORAGE_DELETED = K.quizDeleted;
+  const STORAGE_SESSION = K.quizSession;
+  const STORAGE_UI_SCALE = K.uiScale;
+  // 兼容别名：旧的 UI_SCALE_MIN/MAX 常量
+  const UI_SCALE_MIN = 0.6, UI_SCALE_MAX = 1.5;
+
   const state = {
     allQuestions: [],
     groups: [],           // ordered list of group names (builtin first, then user)
@@ -35,45 +66,18 @@
     tbSeries: new Set(),     // active series filters
     tbTyp: new Set(),        // active typicality filters
     tbQtype: 'name',
+    // ---- 性能优化：rebuildData 的存储缓存 + saveSession 防抖 ----
+    _storageCache: null,        // 缓存 localStorage 中所有题库相关数据（避免每次 rebuild 重复 JSON.parse）
+    _storageCacheDirty: false,  // 标记缓存是否已过期（写入后置 true，下次 rebuild 重新读）
+    _saveSessionTimer: null,    // saveSession 防抖句柄（连续答题只写一次）
   };
 
-  const STORAGE_WRONG = 'morphology_wrong_v1';
-  const STORAGE_STATS = 'morphology_stats_v1';
-  const STORAGE_USER_GROUPS = 'morphology_user_groups_v1';
-  const STORAGE_USER_QUESTIONS = 'morphology_user_questions_v1';
-  const STORAGE_UI_SCALE = 'morphology_ui_scale_v1';
-  const STORAGE_OVERRIDES = 'morphology_q_overrides_v1';  // edits to built-in questions {id: q}
-  const STORAGE_DELETED = 'morphology_q_deleted_v1';      // deleted built-in question ids [..]
-  const STORAGE_SESSION = 'morphology_session_v1';        // in-progress practice session (for resume)
-
-  const UI_SCALE_MIN = 0.6, UI_SCALE_MAX = 1.5;
-  function clampScale(v) { v = Number(v); if (!isFinite(v)) return 1; return Math.max(UI_SCALE_MIN, Math.min(UI_SCALE_MAX, v)); }
-  function loadUIScale() {
-    const raw = localStorage.getItem(STORAGE_UI_SCALE);
-    if (raw === null) {
-      // phones: natural size (layout reflows via CSS; the whole-UI zoom is desktop-only)
-      if (window.innerWidth <= 768) return 1;
-      // sensible first-launch default based on the current viewport height
-      const h = window.innerHeight;
-      const def = h >= 1280 ? 1.1 : h >= 1080 ? 1 : h >= 900 ? 0.92 : 0.82;
-      return clampScale(def);
-    }
-    return clampScale(parseFloat(raw) || 1);
-  }
-  // mobile drawer sidebar
-  function closeDrawer() { const a = document.getElementById('app'); if (a) a.classList.remove('drawer-open'); }
-  function toggleDrawer() { const a = document.getElementById('app'); if (a) a.classList.toggle('drawer-open'); }
-  function saveUIScale(v) { localStorage.setItem(STORAGE_UI_SCALE, String(v)); }
-  function applyUIScale(v) {
-    v = clampScale(v);
-    document.documentElement.style.setProperty('--ui-scale', v);
-    const slider = document.getElementById('size-slider');
-    const val = document.getElementById('size-val');
-    if (slider) slider.value = Math.round(v * 100);
-    if (val) val.textContent = Math.round(v * 100) + '%';
-    return v;
-  }
-  function setUIScale(v) { const c = applyUIScale(v); saveUIScale(c); }
+  // ---- UI 缩放：clampScale/loadScale/saveScale/applyScale/setScale 已委派给 MorphShared ----
+  // 兼容旧调用名
+  function loadUIScale() { return loadScale(); }
+  function saveUIScale(v) { saveScale(v); }
+  function applyUIScale(v) { return applyScale(v); }
+  function setUIScale(v) { setScale(v); }
   function autoFitUIScale() {
     const quizActive = document.getElementById('quiz').classList.contains('active');
     let s;
@@ -92,50 +96,38 @@
     setUIScale(s);
   }
 
-  function loadWrongSet() {
-    try { return new Set(JSON.parse(localStorage.getItem(STORAGE_WRONG) || '[]')); }
-    catch (e) { return new Set(); }
-  }
-  function saveWrongSet(set) { localStorage.setItem(STORAGE_WRONG, JSON.stringify([...set])); }
-  function loadStats() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_STATS) || '{"answered":0,"correct":0}'); }
-    catch (e) { return { answered: 0, correct: 0 }; }
-  }
-  function saveStats(stats) { localStorage.setItem(STORAGE_STATS, JSON.stringify(stats)); }
+  // ---- 存储读写：全部走 MorphShared.lsGet/lsSet（带 try/catch + 配额 toast） ----
+  function loadWrongSet() { return new Set(S.lsGet(STORAGE_WRONG, [])); }
+  function saveWrongSet(set) { const ok = S.lsSet(STORAGE_WRONG, [...set]); if (ok) invalidateStorageCache(); return ok; }
+  function loadStats() { return S.lsGet(STORAGE_STATS, { answered: 0, correct: 0 }); }
+  function saveStats(stats) { return S.lsSet(STORAGE_STATS, stats); }
 
-  function loadUserGroups() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_USER_GROUPS) || '[]'); }
-    catch (e) { return []; }
-  }
-  function saveUserGroups(arr) { localStorage.setItem(STORAGE_USER_GROUPS, JSON.stringify(arr)); }
-  function loadUserQuestions() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_USER_QUESTIONS) || '[]'); }
-    catch (e) { return []; }
-  }
-  function saveUserQuestions(arr) {
-    try {
-      localStorage.setItem(STORAGE_USER_QUESTIONS, JSON.stringify(arr));
-      return true;
-    } catch (e) {
-      alert('保存失败：浏览器存储空间可能已满（图片过多过大）。请删除部分自建题目或图片后重试。');
-      return false;
-    }
-  }
+  function loadUserGroups() { return S.lsGet(STORAGE_USER_GROUPS, []); }
+  function saveUserGroups(arr) { const ok = S.lsSet(STORAGE_USER_GROUPS, arr); if (ok) invalidateStorageCache(); return ok; }
+  function loadUserQuestions() { return S.lsGet(STORAGE_USER_QUESTIONS, []); }
+  function saveUserQuestions(arr) { const ok = S.lsSet(STORAGE_USER_QUESTIONS, arr); if (ok) invalidateStorageCache(); return ok; }
 
   // ---- overrides / deletions for built-in questions ----
-  function loadOverrides() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_OVERRIDES) || '{}'); }
-    catch (e) { return {}; }
+  function loadOverrides() { return S.lsGet(STORAGE_OVERRIDES, {}); }
+  function saveOverrides(obj) { const ok = S.lsSet(STORAGE_OVERRIDES, obj); if (ok) invalidateStorageCache(); return ok; }
+  function loadDeleted() { return new Set(S.lsGet(STORAGE_DELETED, [])); }
+  function saveDeleted(set) { const ok = S.lsSet(STORAGE_DELETED, [...set]); if (ok) invalidateStorageCache(); return ok; }
+
+  // ---- 性能优化：rebuildData 的 localStorage 缓存（避免重复 JSON.parse） ----
+  function getCachedStorage() {
+    if (state._storageCache && !state._storageCacheDirty) return state._storageCache;
+    state._storageCache = {
+      wrong: loadWrongSet(),
+      stats: loadStats(),
+      userGroups: loadUserGroups(),
+      userQuestions: loadUserQuestions(),
+      overrides: loadOverrides(),
+      deleted: loadDeleted(),
+    };
+    state._storageCacheDirty = false;
+    return state._storageCache;
   }
-  function saveOverrides(obj) {
-    try { localStorage.setItem(STORAGE_OVERRIDES, JSON.stringify(obj)); return true; }
-    catch (e) { alert('保存失败：浏览器存储空间可能已满。请精简图片或自建内容后重试。'); return false; }
-  }
-  function loadDeleted() {
-    try { return new Set(JSON.parse(localStorage.getItem(STORAGE_DELETED) || '[]')); }
-    catch (e) { return new Set(); }
-  }
-  function saveDeleted(set) { localStorage.setItem(STORAGE_DELETED, JSON.stringify([...set])); }
+  function invalidateStorageCache() { state._storageCacheDirty = true; state._storageCache = null; }
 
   // is this id one of the original built-in questions?
   let _builtinIds = null;
@@ -145,50 +137,17 @@
   }
   function isBuiltinQuestion(id) { return builtinIdSet().has(id); }
 
-  function shuffle(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
   function normalizeAnswer(s) {
     return String(s).replace(/[^A-Z]/gi, '').toUpperCase().split('').sort().join('');
   }
-  function escapeNothing(s) { return String(s); } // placeholder, we use textContent
+  // (escapeNothing 已移除——我们用 textContent，无需转义)
 
-  function el(tag, props, ...children) {
-    const node = document.createElement(tag);
-    if (props) {
-      for (const [k, v] of Object.entries(props)) {
-        if (k === 'class') node.className = v;
-        else if (k === 'dataset') Object.assign(node.dataset, v);
-        else if (k === 'onclick') node.addEventListener('click', v);
-        else if (k === 'text') node.textContent = v;
-        else node.setAttribute(k, v);
-      }
-    }
-    for (const child of children) {
-      if (child == null) continue;
-      if (typeof child === 'string') node.appendChild(document.createTextNode(child));
-      else node.appendChild(child);
-    }
-    return node;
-  }
+  // 旧 openImgModal / window.closeImgModal 已委派给 MorphShared；保留 window.closeImgModal 以兼容 onclick
+  window.closeImgModal = closeImgModal;
 
-  function openImgModal(src) {
-    document.getElementById('modal-img').setAttribute('src', src);
-    document.getElementById('img-modal').classList.add('show');
-  }
-  window.closeImgModal = function () { document.getElementById('img-modal').classList.remove('show'); };
-
+  // 本模块的 showPanel 包装：在共用逻辑后追加 welcome 面板的 resume 渲染
   function showPanel(panelId) {
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    document.getElementById(panelId).classList.add('active');
-    document.getElementById('main').scrollTop = 0;
-    window.scrollTo(0, 0);
-    closeDrawer();   // on phones, navigating closes the drawer so the result is visible
+    sharedShowPanel(panelId);
     if (panelId === 'welcome') renderResumeUI();
   }
 
@@ -276,24 +235,31 @@
 
   // Merge built-in questions + user-created questions; rebuild group list & numbering.
   function rebuildData() {
+    // 使用缓存的 localStorage 数据（避免每次 rebuild 重复 JSON.parse）
+    const cached = getCachedStorage();
+
     // built-in group order (first appearance)
+    // 注意：不要直接改写 window.QUESTIONS 上的字段（item 19），用 Object.assign 派生新对象
     const builtinOrder = [];
     const seenB = new Set();
-    (window.QUESTIONS || []).forEach(q => {
-      if (q.id == null) q.id = q.number;
-      if (q.group == null) q.group = '题库';
+    const normalizedBuiltin = (window.QUESTIONS || []).map(q => {
+      const copy = Object.assign({}, q);
+      if (copy.id == null) copy.id = q.number;
+      if (copy.group == null) copy.group = '题库';
+      return copy;
+    });
+    normalizedBuiltin.forEach(q => {
       if (!seenB.has(q.group)) { seenB.add(q.group); builtinOrder.push(q.group); }
     });
     state.builtinGroups = new Set(builtinOrder);
 
-    const userGroups = loadUserGroups();        // ordered names (may include empty groups)
-    const userQs = loadUserQuestions();
-    userQs.forEach(q => { q.userCreated = true; });
+    const userGroups = cached.userGroups.slice();        // ordered names (may include empty groups)
+    const userQs = cached.userQuestions.map(q => Object.assign({}, q, { userCreated: true }));
 
     // apply edits (overrides) and deletions to built-in questions
-    const overrides = loadOverrides();
-    const deleted = loadDeleted();
-    const builtinEffective = (window.QUESTIONS || [])
+    const overrides = cached.overrides;
+    const deleted = cached.deleted;
+    const builtinEffective = normalizedBuiltin
       .filter(q => !deleted.has(q.id))
       .map(q => {
         if (!overrides[q.id]) return q;
@@ -320,10 +286,10 @@
 
     // cleanup wrong set: drop ids that no longer exist
     const allIds = new Set(state.allQuestions.map(q => q.id));
-    const wrongSet = loadWrongSet();
+    const wrongSet = cached.wrong;
     let changed = false;
     for (const id of [...wrongSet]) { if (!allIds.has(id)) { wrongSet.delete(id); changed = true; } }
-    if (changed) saveWrongSet(wrongSet);
+    if (changed) { saveWrongSet(wrongSet); invalidateStorageCache(); }
 
     // keep activeGroup valid
     if (!state.activeGroup || !state.groups.includes(state.activeGroup)) {
@@ -376,52 +342,85 @@
   }
 
   // ---------- Session persistence (resume where you left off) ----------
+  // 防抖：连续答题（每题都触发 saveSession）合并为 800ms 内的一次写入
   function saveSession() {
+    if (state._saveSessionTimer) clearTimeout(state._saveSessionTimer);
+    state._saveSessionTimer = setTimeout(_doSaveSession, 800);
+  }
+  function _doSaveSession() {
+    state._saveSessionTimer = null;
     const qs = state.sessionQuestions;
     if (!qs || !qs.length) return;
     const data = {
-      version: 1,
+      version: S.PAYLOAD_VERSION,
       savedAt: Date.now(),
       label: state.sessionLabel,
       mode: state.mode,
       currentIdx: state.currentIdx,
       currentCategory: state.currentCategory || null,
       results: state.results,
-      // real questions → id refs (no data duplication); generated 标签库 questions → saved whole
-      questions: qs.map(q => (q._ephemeral ? { e: q } : { id: q.id })),
+      // real questions → id refs. 标签库临时题只保存引用，避免把 data:image 大图重复写入续练进度。
+      questions: qs.map(q => {
+        if (q._ephemeral && q._taglibId) return { tlId: q._taglibId, qtype: q._taglibQtype || state.exploreQtype || 'name' };
+        return q._ephemeral ? { e: q } : { id: q.id };
+      }),
     };
-    try { localStorage.setItem(STORAGE_SESSION, JSON.stringify(data)); } catch (e) { /* storage full: skip */ }
+    S.lsSet(STORAGE_SESSION, data);
   }
-  function loadSession() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_SESSION) || 'null'); } catch (e) { return null; }
+  function loadSession() { return S.lsGet(STORAGE_SESSION, null); }
+  function clearSession() {
+    if (state._saveSessionTimer) {
+      clearTimeout(state._saveSessionTimer);
+      state._saveSessionTimer = null;
+    }
+    S.lsRemove(STORAGE_SESSION);
   }
-  function clearSession() { localStorage.removeItem(STORAGE_SESSION); }
 
   // meaningful progress worth resuming? (answered something or moved past Q1)
   function sessionProgress(saved) {
     if (!saved || !Array.isArray(saved.questions) || !saved.questions.length) return null;
     const total = saved.questions.length;
-    const answered = saved.results ? Object.keys(saved.results).length : 0;
+    const results = saved.results || {};
+    const answered = Object.keys(results).length;
+    let correct = 0; for (const k in results) { if (results[k] && results[k].correct) correct++; }
     const idx = Math.min(saved.currentIdx || 0, total - 1);
     if (answered === 0 && idx === 0) return null;
-    return { total, answered, idx, label: saved.label || '上次练习' };
+    return { total, answered, correct, idx, label: saved.label || '上次练习', savedAt: saved.savedAt || null };
+  }
+  function relTime(ts) {
+    if (!ts) return '';
+    const m = Math.floor((Date.now() - ts) / 60000);
+    if (m < 1) return '刚刚';
+    if (m < 60) return m + ' 分钟前';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' 小时前';
+    const d = Math.floor(h / 24);
+    if (d === 1) return '昨天';
+    if (d < 7) return d + ' 天前';
+    return new Date(ts).toLocaleDateString();
   }
 
   function restoreSession(saved) {
     if (!saved || !Array.isArray(saved.questions)) { clearSession(); renderResumeUI(); return; }
     const byId = new Map(state.allQuestions.map(q => [q.id, q]));
+    taglibEntries();
     const qs = [];
     saved.questions.forEach(item => {
       if (item && item.e) qs.push(item.e);
+      else if (item && item.tlId) {
+        const e = state.taglibById.get(item.tlId);
+        if (e) qs.push(taglibQuestion(e, item.qtype || saved.qtype || state.exploreQtype || 'name', { id: e.id }));
+      }
       else if (item && item.id != null && byId.has(item.id)) qs.push(byId.get(item.id));
     });
-    if (!qs.length) { alert('上次练习的题目已不存在，无法继续。'); clearSession(); renderResumeUI(); return; }
+    if (!qs.length) { toast('上次练习的题目已不存在，无法继续。', 'bad'); clearSession(); renderResumeUI(); return; }
     // keep only results belonging to questions still present (accurate score)
     const present = new Set(qs.map(q => String(q.id)));
     const results = {};
     Object.keys(saved.results || {}).forEach(k => { if (present.has(k)) results[k] = saved.results[k]; });
     state.sessionQuestions = qs;
     state.results = results;
+    state.counted = new Set(Object.keys(results));   // 恢复时把已答题标记为已计入
     state.mode = saved.mode || 'practice';
     state.sessionLabel = saved.label || '继续练习';
     state.currentCategory = saved.currentCategory || null;
@@ -442,9 +441,14 @@
       if (banner) banner.style.display = 'none';
       return;
     }
-    const txt = `${p.label} · 第 ${p.idx + 1}/${p.total} 题（已答 ${p.answered}）`;
-    if (sec) { sec.style.display = 'block'; const pr = document.getElementById('resume-progress'); if (pr) pr.textContent = txt; }
-    if (banner) { banner.style.display = 'flex'; const bt = document.getElementById('resume-banner-text'); if (bt) bt.textContent = txt; }
+    const rate = p.answered > 0 ? Math.round(p.correct / p.answered * 100) : 0;
+    const parts = [p.label, `第 ${p.idx + 1}/${p.total} 题`, `已答 ${p.answered}`];
+    if (p.answered > 0) parts.push(`正确率 ${rate}%`);
+    const when = relTime(p.savedAt);
+    const short = `第 ${p.idx + 1}/${p.total} 题 · 已答 ${p.answered}${p.answered > 0 ? ' · 正确率 ' + rate + '%' : ''}`;
+    const full = (when ? when + ' · ' : '') + parts.join(' · ');
+    if (sec) { sec.style.display = 'block'; const pr = document.getElementById('resume-progress'); if (pr) pr.textContent = short; }
+    if (banner) { banner.style.display = 'flex'; const bt = document.getElementById('resume-banner-text'); if (bt) bt.textContent = full; }
   }
 
   // ---------- Session ----------
@@ -464,12 +468,13 @@
     } else {
       qs = groupQuestions(state.activeGroup);
     }
-    if (qs.length === 0) { alert('没有可练习的题目'); return; }
+    if (qs.length === 0) { toast('没有可练习的题目', 'bad'); return; }
 
     if (forceShuffle || document.getElementById('shuffle-toggle').checked) qs = shuffle(qs);
 
     state.sessionQuestions = qs;
     state.results = {};
+    state.counted = new Set();   // 本轮已计入累计统计的题（防重做重复计）
     state.currentIdx = 0;
     state.submitted = false;
     state.mode = mode;
@@ -490,6 +495,32 @@
   }
 
   // ---------- Question navigator ----------
+  // ---------- Scroll / motion helpers ----------
+  function _reduceMotion() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function scrollQuizTop() { window.scrollTo({ top: 0, behavior: _reduceMotion() ? 'auto' : 'smooth' }); const m = document.getElementById('main'); if (m) m.scrollTop = 0; }
+  function scrollFeedbackIntoView() {
+    const fb = document.querySelector('#question-card .feedback');
+    if (fb) fb.scrollIntoView({ block: 'nearest', behavior: _reduceMotion() ? 'auto' : 'smooth' });
+  }
+  // 展开答题卡时把「当前题」滚到可视区中部（不牵动整页滚动）
+  function centerCurrentQnav() {
+    const nav = document.getElementById('qnav');
+    if (!nav || !nav.classList.contains('open')) return;
+    const cur = nav.querySelector('.qnav-item.current');
+    if (cur) nav.scrollTop = Math.max(0, cur.offsetTop - nav.clientHeight / 2 + cur.clientHeight / 2);
+  }
+  // 重做本题：清掉本题作答，回到未答态（累计统计不重复计入，见 state.counted）
+  function redoQuestion(q) {
+    delete state.results[q.id];
+    state.submitted = false;
+    state.selectedSet = new Set();
+    renderQuestion();
+    renderQnav();
+    refreshWrongUI();
+    refreshStatsUI();
+    saveSession();
+  }
+
   function renderQnav() {
     const nav = document.getElementById('qnav');
     nav.textContent = '';
@@ -498,21 +529,24 @@
       if (idx === state.currentIdx) cls += ' current';
       const r = state.results[q.id];
       if (r) cls += r.correct ? ' correct' : ' wrong';
+      const navNumber = q.displayNumber != null ? q.displayNumber : idx + 1;
       const item = el('button', {
         class: cls,
-        text: String(q.displayNumber),
-        title: `第 ${q.displayNumber} 题`,
+        text: String(navNumber),
+        title: `第 ${navNumber} 题`,
         onclick: () => jumpToIndex(idx)
       });
       nav.appendChild(item);
     });
+    centerCurrentQnav();
   }
 
   function jumpToIndex(idx) {
-    if (idx < 0 || idx >= state.sessionQuestions.length) { alert('题号超出范围'); return; }
+    if (idx < 0 || idx >= state.sessionQuestions.length) { toast('题号超出范围', 'bad'); return; }
     state.currentIdx = idx;
     renderQuestion();
     renderQnav();
+    scrollQuizTop();
     saveSession();
   }
 
@@ -551,7 +585,7 @@
     const flag = questionFlag(q);
     if (flag) {
       const fb = el('span', { class: 'badge flag', title: flag, text: '⚠ 答案存疑' });
-      fb.addEventListener('click', () => alert('本题存疑说明：\n\n' + flag));
+      fb.addEventListener('click', () => toast('本题存疑说明：' + flag, 'info', 6000));
       meta.appendChild(fb);
     }
     card.appendChild(meta);
@@ -561,8 +595,8 @@
     if (q.images && q.images.length) {
       const imgWrap = el('div', { class: 'q-images' });
       q.images.forEach(src => {
-        const img = el('img', { src, alt: '题图' });
-        img.addEventListener('click', () => openImgModal(src));
+        const img = el('img', { src, alt: (q.question || '题图').slice(0, 80), loading: 'lazy', decoding: 'async' });
+        img.addEventListener('click', () => openImgModal(src, (q.question || '题图').slice(0, 80)));
         imgWrap.appendChild(img);
       });
       card.appendChild(imgWrap);
@@ -575,7 +609,7 @@
       const content = el('div', { class: 'opt-content' });
       if (opt.text) content.appendChild(document.createTextNode(opt.text));
       if (opt.image) {
-        const optImg = el('img', { src: opt.image, alt: '选项图' });
+        const optImg = el('img', { src: opt.image, alt: (opt.text || '选项图').slice(0, 80), loading: 'lazy', decoding: 'async' });
         optImg.addEventListener('click', e => {
           if (state.submitted) { e.stopPropagation(); openImgModal(opt.image); }
         });
@@ -614,7 +648,7 @@
   }
 
   function appendFeedback(card, q, userAns, isCorrect) {
-    const fb = el('div', { class: 'feedback ' + (isCorrect ? 'ok' : 'bad') });
+    const fb = el('div', { class: 'feedback ' + (isCorrect ? 'ok' : 'bad'), role: 'status', 'aria-live': 'polite' });
     if (isCorrect) {
       fb.appendChild(document.createTextNode('回答正确 ✓ 正确答案：'));
     } else {
@@ -629,6 +663,11 @@
     if (rightTexts) fb.appendChild(el('span', { class: 'ans-text', text: '（' + rightTexts + '）' }));
     card.appendChild(fb);
     if (q.explanation) card.appendChild(el('div', { class: 'feedback-exp', text: '💡 ' + q.explanation }));
+    // 误触/想重看时可重做本题（尤其单选点一下即判分的情况）
+    const redoRow = el('div', { class: 'feedback-actions' },
+      el('button', { class: 'btn btn-sm btn-ghost', text: '↻ 重做此题', onclick: () => redoQuestion(q) })
+    );
+    card.appendChild(redoRow);
   }
 
   function onSelectOption(btn, q) {
@@ -648,20 +687,23 @@
 
   function submitAnswer() {
     const q = state.sessionQuestions[state.currentIdx];
-    if (state.selectedSet.size === 0) { alert('请先选择答案'); return; }
+    if (state.selectedSet.size === 0) { toast('请先选择答案', 'bad'); return; }
 
-    const alreadyAnswered = !!state.results[q.id];
+    if (!state.counted) state.counted = new Set();
+    const idKey = String(q.id);
+    const alreadyCounted = state.counted.has(idKey);   // 重做同一题不重复计入累计统计
     state.submitted = true;
     const userAns = [...state.selectedSet].sort().join('');
     const rightAns = normalizeAnswer(q.answer);
     const isCorrect = userAns === rightAns;
     state.results[q.id] = { userAns, correct: isCorrect };
 
-    if (!alreadyAnswered) {
+    if (!alreadyCounted) {
       const stats = loadStats();
       stats.answered += 1;
       if (isCorrect) stats.correct += 1;
-      saveStats(stats);
+      if (!saveStats(stats)) return;
+      state.counted.add(idKey);
     }
 
     // ephemeral generated questions (tag-library quick tests) are practice-only:
@@ -669,9 +711,9 @@
     if (!q._ephemeral) {
       const wrongSet = loadWrongSet();
       if (isCorrect) {
-        if (state.mode === 'wrong') { wrongSet.delete(q.id); saveWrongSet(wrongSet); }
+        if (state.mode === 'wrong') { wrongSet.delete(q.id); if (!saveWrongSet(wrongSet)) return; }
       } else {
-        wrongSet.add(q.id); saveWrongSet(wrongSet);
+        wrongSet.add(q.id); if (!saveWrongSet(wrongSet)) return;
       }
     }
 
@@ -700,6 +742,7 @@
     refreshWrongUI();
     refreshStatsUI();
     saveSession();
+    scrollFeedbackIntoView();   // 判分后把「正确答案 + 解析」滚入视口
   }
 
   function nextQuestion() {
@@ -707,6 +750,7 @@
     state.currentIdx += 1;
     renderQuestion();
     renderQnav();
+    scrollQuizTop();
     saveSession();
   }
   function prevQuestion() {
@@ -714,6 +758,7 @@
     state.currentIdx -= 1;
     renderQuestion();
     renderQnav();
+    scrollQuizTop();
     saveSession();
   }
 
@@ -725,6 +770,8 @@
     document.getElementById('result-total').textContent = total;
     document.getElementById('result-correct').textContent = cs.correct;
     document.getElementById('result-wrong').textContent = cs.wrong;
+    const unansweredEl = document.getElementById('result-unanswered');
+    if (unansweredEl) unansweredEl.textContent = Math.max(0, total - answered);
     document.getElementById('result-rate').textContent = rate + '%';
     clearSession();          // round finished → nothing to resume
     showPanel('result');
@@ -806,15 +853,16 @@
   }
 
   let _tlCache = null;
+  function invalidateTaglibCache() { _tlCache = null; state.taglibById = new Map(); }
   function taglibEntries() {
     if (_tlCache) return _tlCache;
     const seed = (window.SEED_ENTRIES || []);
     // Defensive cross-module read: on file:// many browsers share localStorage across the
     // sibling 标签库 page, so the user's own additions/edits flow through automatically.
     let user = [], overrides = {}, deleted = new Set();
-    try { const u = JSON.parse(localStorage.getItem('mtl_user_entries_v1') || '[]'); if (Array.isArray(u)) user = u; } catch (e) {}
-    try { const o = JSON.parse(localStorage.getItem('mtl_overrides_v1') || '{}'); if (o && typeof o === 'object') overrides = o; } catch (e) {}
-    try { deleted = new Set(JSON.parse(localStorage.getItem('mtl_deleted_v1') || '[]')); } catch (e) {}
+    try { const u = JSON.parse(localStorage.getItem(K.taglibUser) || '[]'); if (Array.isArray(u)) user = u; } catch (e) {}
+    try { const o = JSON.parse(localStorage.getItem(K.taglibOverrides) || '{}'); if (o && typeof o === 'object') overrides = o; } catch (e) {}
+    try { deleted = new Set(JSON.parse(localStorage.getItem(K.taglibDeleted) || '[]')); } catch (e) {}
     const eff = seed.filter(e => e && !deleted.has(e.id)).map(e => overrides[e.id] || e).concat(user);
     const map = new Map();
     _tlCache = eff.filter(e => e && e.image).map(e => {
@@ -879,6 +927,8 @@
       explanation: entry.explanation || note || '',
       _taglib: true,
       _ephemeral: !opts.permanent,
+      _taglibId: entry.id,
+      _taglibQtype: qtype,
       userCreated: !!opts.permanent,
     };
   }
@@ -954,7 +1004,8 @@
       if (b.name === TAGLIB_TOP) return 1;
       return nodeCount(b) - nodeCount(a);
     });
-    tops.forEach(node => wrap.appendChild(renderTreeNode(node, 0)));
+    // 默认展开「标签库·细胞图谱」这一重点分支，让用户一进来就看到细胞结构
+    tops.forEach(node => wrap.appendChild(renderTreeNode(node, 0, node.name === TAGLIB_TOP)));
     updateExploreFooter();
   }
 
@@ -980,7 +1031,7 @@
     [...state.exploreTree.children.values()].forEach(top => toggleNodeSelection(top, true));
   }
 
-  function renderTreeNode(node, depth) {
+  function renderTreeNode(node, depth, autoOpen) {
     state.exploreNodeByKey.set(node.key, node);
     const hasChildren = node.children.size > 0;
     const isTaglib = node.entryIds.size > 0 && node.ids.size === 0;   // pure tag-library node
@@ -988,14 +1039,20 @@
 
     const row = el('div', { class: 'tree-row lvl' + depth + (isTaglib ? ' tl-node' : '') });
 
-    const toggle = el('span', { class: 'tree-toggle' + (hasChildren ? '' : ' leaf'), text: hasChildren ? '▸' : '·' });
-    const childrenWrap = el('div', { class: 'tree-children', style: `margin-left:${18 + depth * 6}px` });
+    const startOpen = hasChildren && !!autoOpen;
+    const toggle = el('button', { type: 'button', class: 'tree-toggle' + (hasChildren ? '' : ' leaf'), text: hasChildren ? (startOpen ? '▾' : '▸') : '·', 'aria-label': hasChildren ? (startOpen ? '折叠分类' : '展开分类') : '叶节点' });
+    const childrenWrap = el('div', { class: 'tree-children' + (startOpen ? ' open' : ''), style: `margin-left:${18 + depth * 6}px` });
 
     if (hasChildren) {
       toggle.addEventListener('click', () => {
         const open = childrenWrap.classList.toggle('open');
         toggle.textContent = open ? '▾' : '▸';
+        toggle.setAttribute('aria-label', open ? '折叠分类' : '展开分类');
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
+      toggle.setAttribute('aria-expanded', startOpen ? 'true' : 'false');
+    } else {
+      toggle.disabled = true;
     }
 
     const cb = el('input', { type: 'checkbox' });
@@ -1004,7 +1061,7 @@
     state.exploreCheckboxes.set(node.key, cb);
     cb.addEventListener('change', () => { toggleNodeSelection(node, cb.checked); });
 
-    const name = el('span', { class: 'tree-name', text: node.name });
+    const name = el('button', { type: 'button', class: 'tree-name', text: node.name });
     name.addEventListener('click', () => {
       if (hasChildren) { toggle.click(); }
       else { openGallery(node); }   // leaf name → image gallery
@@ -1012,8 +1069,8 @@
 
     const count = el('span', { class: 'tree-count', text: nodeCount(node) });
     if (depth === 0 && isTaglib) name.appendChild(el('span', { class: 'tl-tag', text: '标签库' }));
-    const gallery = el('button', { class: 'tree-practice', text: '看图', onclick: () => openGallery(node) });
-    const practice = el('button', { class: 'tree-practice', text: '练习', onclick: () => practiceNode(node) });
+    const gallery = el('button', { class: 'tree-practice tree-look', text: '看图', title: `查看「${node.name}」全部图片`, onclick: () => openGallery(node) });
+    const practice = el('button', { class: 'tree-practice tree-do', text: '练习', title: `练习「${node.name}」`, onclick: () => practiceNode(node) });
 
     row.appendChild(toggle);
     row.appendChild(cb);
@@ -1042,7 +1099,7 @@
   }
   function practiceNode(node) {
     const pool = nodeQuestions(node);
-    if (pool.length === 0) { alert('该分类暂无可练习的内容'); return; }
+    if (pool.length === 0) { toast('该分类暂无可练习的内容', 'bad'); return; }
     startSession({ pool, label: `分类练习：${node.name}（${pool.length}题）`, mode: 'practice', shuffle: true });
   }
 
@@ -1174,7 +1231,7 @@
   function startRandomTest() {
     const all = questionsForExplore();
     let n = parseInt(document.getElementById('rand-count').value, 10);
-    if (isNaN(n) || n < 1) { alert('请输入要抽取的题目数量'); return; }
+    if (isNaN(n) || n < 1) { toast('请输入要抽取的题目数量', 'bad'); return; }
     n = Math.min(n, all.length);
     const ids = shuffle(all.map(q => q.id)).slice(0, n);
     startSession({ ids, label: `随机测试（${n} 题）`, mode: 'practice', shuffle: true });
@@ -1182,7 +1239,7 @@
 
   function startCustomTest() {
     const { qIds, eIds } = selectedSpecimens();
-    if (qIds.size + eIds.size === 0) { alert('请先在上面勾选至少一个分类'); return; }
+    if (qIds.size + eIds.size === 0) { toast('请先在上面勾选至少一个分类', 'bad'); return; }
     const byId = new Map(state.allQuestions.map(q => [q.id, q]));
     let pool = [];
     qIds.forEach(id => { const q = byId.get(id); if (q) pool.push(q); });
@@ -1212,7 +1269,7 @@
       (state.tbTyp.size === 0 || state.tbTyp.has(e.typicality)));
   }
   function openTaglibBuild(presetGroup) {
-    if (!taglibAvailable()) { alert('未找到标签库数据。\n请确认「标签库」与「练习系统」在同一文件夹内（综合系统）。'); return; }
+    if (!taglibAvailable()) { toast('未找到标签库数据。请确认「标签库」与「练习系统」在同一文件夹内（综合系统）。', 'bad'); return; }
     taglibEntries();
     state.tbSelected = new Set();
     state.tbSeries = new Set();
@@ -1254,7 +1311,7 @@
     } else {
       list.forEach(e => {
         const isSel = state.tbSelected.has(e.id);
-        const card = el('div', { class: 'tb-card' + (isSel ? ' sel' : '') });
+        const card = el('button', { type: 'button', class: 'tb-card' + (isSel ? ' sel' : ''), 'aria-pressed': isSel ? 'true' : 'false' });
         card.appendChild(el('div', { class: 'tb-check', text: isSel ? '✓' : '' }));
         card.appendChild(el('img', { src: e.img, alt: e.name, loading: 'lazy' }));
         const cap = el('div', { class: 'tb-cap' }, el('span', { class: 'tb-name', text: e.name }));
@@ -1270,15 +1327,15 @@
   function tbSelectAllFiltered() { tbFiltered().forEach(e => state.tbSelected.add(e.id)); renderTbGrid(); }
   function tbClearSel() { state.tbSelected = new Set(); renderTbGrid(); }
   function generateFromTaglib() {
-    if (state.tbSelected.size === 0) { alert('请先选择至少一张图片。'); return; }
+    if (state.tbSelected.size === 0) { toast('请先选择至少一张图片。', 'bad'); return; }
     let group = document.getElementById('tb-group').value;
     if (group === '__new__') {
       const name = (prompt('新建题库名称：', '我的标签库题库') || '').trim();
       if (!name) return;
-      if (!state.groups.includes(name)) { const ug = loadUserGroups(); ug.push(name); saveUserGroups(ug); }
+      if (!state.groups.includes(name)) { const ug = loadUserGroups(); ug.push(name); if (!saveUserGroups(ug)) return; }
       group = name;
     } else if (isBuiltinGroup(group)) {
-      alert('请选择一个自建题库或新建题库（内置题库不支持直接批量加题）。'); return;
+      toast('请选择一个自建题库或新建题库（内置题库不支持直接批量加题）。', 'bad'); return;
     }
     const qtype = state.tbQtype;
     const selected = [...state.tbSelected].map(id => state.taglibById.get(id)).filter(Boolean);
@@ -1287,7 +1344,7 @@
     if (!saveUserQuestions(uq)) return;
     rebuildData();
     renderSidebar();
-    alert(`已生成 ${selected.length} 道题，加入题库「${group}」。`);
+    toast(`已生成 ${selected.length} 道题，加入题库「${group}」。`);
     state.manageGroup = group;
     renderManageGroupQuestions();
     showPanel('manage-group');
@@ -1337,10 +1394,9 @@
     (window.QUESTIONS || []).forEach(q => {
       if (q.group === g) { delete overrides[q.id]; deleted.delete(q.id); }
     });
-    saveOverrides(overrides);
-    saveDeleted(deleted);
+    if (!saveOverrides(overrides) || !saveDeleted(deleted)) return;
     // remove user-added questions that were placed into this built-in group
-    saveUserQuestions(loadUserQuestions().filter(q => q.group !== g));
+    if (!saveUserQuestions(loadUserQuestions().filter(q => q.group !== g))) return;
     rebuildData(); renderSidebar(); renderManageGroups();
   }
 
@@ -1348,11 +1404,11 @@
     let name = prompt('请输入新题库的名称：', '');
     if (name == null) return;
     name = name.trim();
-    if (!name) { alert('名称不能为空'); return; }
-    if (state.groups.includes(name)) { alert('已存在同名题库'); return; }
+    if (!name) { toast('名称不能为空', 'bad'); return; }
+    if (state.groups.includes(name)) { toast('已存在同名题库', 'bad'); return; }
     const ug = loadUserGroups();
     ug.push(name);
-    saveUserGroups(ug);
+    if (!saveUserGroups(ug)) return;
     rebuildData();
     renderSidebar();
     renderManageGroups();
@@ -1365,13 +1421,13 @@
     let name = prompt('请输入新的题库名称：', oldName);
     if (name == null) return;
     name = name.trim();
-    if (!name) { alert('名称不能为空'); return; }
+    if (!name) { toast('名称不能为空', 'bad'); return; }
     if (name === oldName) return;
-    if (state.groups.includes(name)) { alert('已存在同名题库'); return; }
+    if (state.groups.includes(name)) { toast('已存在同名题库', 'bad'); return; }
     const ug = loadUserGroups().map(g => g === oldName ? name : g);
-    saveUserGroups(ug);
+    if (!saveUserGroups(ug)) return;
     const uq = loadUserQuestions().map(q => { if (q.group === oldName) q.group = name; return q; });
-    saveUserQuestions(uq);
+    if (!saveUserQuestions(uq)) return;
     if (state.activeGroup === oldName) state.activeGroup = name;
     if (state.manageGroup === oldName) state.manageGroup = name;
     rebuildData();
@@ -1383,8 +1439,8 @@
     if (isBuiltinGroup(name)) return;
     const n = groupQuestions(name).length;
     if (!confirm(`确认删除题库「${name}」？其中的 ${n} 道题目也会一并删除，且不可恢复。`)) return;
-    saveUserGroups(loadUserGroups().filter(g => g !== name));
-    saveUserQuestions(loadUserQuestions().filter(q => q.group !== name));
+    if (!saveUserGroups(loadUserGroups().filter(g => g !== name))) return;
+    if (!saveUserQuestions(loadUserQuestions().filter(q => q.group !== name))) return;
     rebuildData();
     renderSidebar();
     renderManageGroups();
@@ -1407,13 +1463,13 @@
       questions = uq.slice();
     }
     if (groups.length === 0 && questions.length === 0) {
-      alert('当前没有可导出的题库内容。');
+      toast('当前没有可导出的题库内容。', 'bad');
       return;
     }
     const payload = {
       app: 'morphology-quiz',
       type: 'question-bank-export',
-      version: 1,
+      version: S.PAYLOAD_VERSION,
       exportedAt: new Date().toISOString(),
       groups,
       questions,
@@ -1429,23 +1485,52 @@
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);  // 2s → 10s：大文件下载需要更多时间
   }
 
   function importUserData(file) {
     if (!file) return;
+    const importCheck = S.isSafeImportFile(file);
+    if (!importCheck.ok) { toast(importCheck.reason, 'bad'); return; }
     const reader = new FileReader();
     reader.onload = () => {
       let data;
       try { data = JSON.parse(reader.result); }
-      catch (e) { alert('导入失败：所选文件不是有效的 JSON 文件。'); return; }
+      catch (e) { toast('导入失败：所选文件不是有效的 JSON 文件。', 'bad'); return; }
       if (!data || !Array.isArray(data.questions)) {
-        alert('导入失败：文件格式不正确（找不到题目数据）。请使用本程序「导出」生成的文件。');
+        toast('导入失败：文件格式不正确（找不到题目数据）。请使用本程序「导出」生成的文件。', 'bad');
+        return;
+      }
+      // 版本校验（item 4）：高版本或缺少版本字段时拒绝
+      if (!S.checkPayloadVersion(data)) {
+        toast('导入失败：文件版本不兼容（version=' + (data && data.version) + '）。', 'bad');
         return;
       }
 
       const ug = loadUserGroups();
       const uq = loadUserQuestions();
+      // ID 冲突映射（item 4）：导入的题目若 id 与已存在 id 冲突，重新分配并记录
+      const existingIds = new Set(state.allQuestions.map(q => q.id));
+      const idMap = {};
+      let remapped = 0;
+      // 为每条导入题分配不冲突的 id
+      data.questions.forEach(q => {
+        if (!q || typeof q.question !== 'string' || !q.question.trim()) return;
+        if (q.id == null || existingIds.has(q.id)) {
+          const newId = newQuestionId();
+          if (q.id != null) { idMap[q.id] = newId; remapped++; }
+          q.id = newId;
+        }
+        existingIds.add(q.id);
+      });
+      // 校验图片路径安全（item 6）：拒绝 ../ 等跨目录路径
+      data.questions.forEach(q => {
+        if (q && Array.isArray(q.images)) q.images = q.images.filter(s => isSafeImgPath(s));
+        if (q && Array.isArray(q.options)) q.options.forEach(o => {
+          if (o && typeof o.image === 'string' && !isSafeImgPath(o.image)) o.image = null;
+        });
+      });
+
       const taken = new Set([...state.groups, ...ug]); // builtin + existing user groups
       function uniqueName(name) {
         if (!taken.has(name)) return name;
@@ -1479,19 +1564,24 @@
         if (!Array.isArray(q.options) || q.options.length < 2) { skipped++; return; }
         let grp = (typeof q.group === 'string' && nameMap[q.group]) ? nameMap[q.group] : null;
         if (!grp) { skipped++; return; }
-        const opts = q.options
-          .filter(o => o && typeof o.text === 'string' && o.text.trim())
-          .map((o, i) => ({
-            letter: String.fromCharCode(65 + i),
-            text: o.text.trim(),
-            image: (typeof o.image === 'string' && o.image) ? o.image : null,
-          }));
+        const optLetterMap = {};
+        const opts = [];
+        q.options.forEach((o, i) => {
+          if (!o) return;
+          const text = (typeof o.text === 'string') ? o.text.trim() : '';
+          const image = (typeof o.image === 'string' && o.image) ? o.image : null;
+          if (!text && !image) return;
+          const newLetter = String.fromCharCode(65 + opts.length);
+          const oldLetter = String(o.letter || String.fromCharCode(65 + i)).toUpperCase().replace(/[^A-Z]/g, '').charAt(0) || String.fromCharCode(65 + i);
+          optLetterMap[oldLetter] = newLetter;
+          opts.push({ letter: newLetter, text, image });
+        });
         if (opts.length < 2) { skipped++; return; }
-        const answer = String(q.answer || '').toUpperCase().replace(/[^A-E]/g, '');
+        const answer = normalizeAnswer(q.answer).split('').map(L => optLetterMap[L]).filter(Boolean).sort().join('');
         const validAns = answer.length > 0 && [...answer].every(L => opts.some(o => o.letter === L));
         if (!validAns) { skipped++; return; }
         uq.push({
-          id: newQuestionId(),
+          id: q.id || newQuestionId(),
           group: grp,
           category: (typeof q.category === 'string' && q.category.trim()) ? q.category.trim() : '其他',
           question: q.question.trim(),
@@ -1505,18 +1595,20 @@
       });
 
       if (added === 0 && newGroupCount === 0) {
-        alert('导入失败：文件中没有可识别的题库或题目。');
+        toast('导入失败：文件中没有可识别的题库或题目。', 'bad');
         return;
       }
+      if (!saveUserGroups(ug)) return;
       if (!saveUserQuestions(uq)) return;   // quota guard inside
-      saveUserGroups(ug);
+      invalidateStorageCache();
 
       rebuildData();
       renderSidebar();
       renderManageGroups();
       showPanel('manage');
-      alert(`导入完成：新增 ${newGroupCount} 个题库、${added} 道题目`
-        + (skipped ? `（另有 ${skipped} 条数据格式异常，已跳过）` : '') + '。');
+      toast(`导入完成：新增 ${newGroupCount} 个题库、${added} 道题目`
+        + (skipped ? `（另有 ${skipped} 条数据格式异常，已跳过）` : '')
+        + (remapped ? `（${remapped} 条 ID 冲突已重新分配）` : '') + '。');
     };
     reader.readAsText(file);
   }
@@ -1549,7 +1641,7 @@
       const titleLine = el('div', { class: 'mq-text', text: `第 ${q.displayNumber} 题：${qText.length > 70 ? qText.slice(0, 70) + '…' : qText}` });
       if (flag) {
         const b = el('span', { class: 'badge flag', title: flag, text: '⚠ 答案存疑', style: 'margin-left:6px;cursor:help' });
-        b.addEventListener('click', () => alert('本题存疑说明：\n\n' + flag));
+        b.addEventListener('click', () => toast('本题存疑说明：' + flag, 'info', 6000));
         titleLine.appendChild(b);
       }
       info.appendChild(titleLine);
@@ -1567,12 +1659,14 @@
     const q = state.allQuestions.find(x => x.id === id);
     if (!confirm(`确认删除第 ${q ? q.displayNumber : '?'} 题？此操作不可恢复（内置题可用题库列表的「恢复默认」找回）。`)) return;
     if (isBuiltinQuestion(id)) {
-      const del = loadDeleted(); del.add(id); saveDeleted(del);
-      const ov = loadOverrides(); if (ov[id]) { delete ov[id]; saveOverrides(ov); }
+      let ok = true;
+      const del = loadDeleted(); del.add(id); ok = saveDeleted(del);
+      const ov = loadOverrides(); if (ov[id]) { delete ov[id]; ok = saveOverrides(ov) && ok; }
+      if (!ok) return;
     } else {
-      saveUserQuestions(loadUserQuestions().filter(x => x.id !== id));
+      if (!saveUserQuestions(loadUserQuestions().filter(x => x.id !== id))) return;
     }
-    const ws = loadWrongSet(); ws.delete(id); saveWrongSet(ws);
+    const ws = loadWrongSet(); ws.delete(id); if (!saveWrongSet(ws)) return;
     rebuildData();
     renderSidebar();
     renderManageGroupQuestions();
@@ -1640,6 +1734,17 @@
     optWrap.textContent = '';
     const LETTERS = ['A', 'B', 'C', 'D', 'E'];
     const rightSet = existing ? new Set(normalizeAnswer(existing.answer).split('')) : new Set();
+    // 实时提示题型（单选 / 不定项），并高亮已勾「正确」的行
+    const answerHint = el('div', { class: 'qf-answer-type' });
+    function updateAnswerTypeHint() {
+      let n = 0;
+      optWrap.querySelectorAll('.qf-opt-row').forEach(row => {
+        const c = row.querySelector('input[type="checkbox"]');
+        if (c && c.checked) { n++; row.classList.add('is-correct'); } else row.classList.remove('is-correct');
+      });
+      answerHint.className = 'qf-answer-type ' + (n === 0 ? 'none' : n === 1 ? 'single' : 'multi');
+      answerHint.textContent = n === 0 ? '⚠ 还没勾选「正确」选项' : (n === 1 ? '题型：单选题' : `题型：不定项选择（${n} 个正确）`);
+    }
     for (let i = 0; i < 5; i++) {
       const letter = LETTERS[i];
       const existingOpt = existing && existing.options[i] ? existing.options[i] : null;
@@ -1650,6 +1755,7 @@
       if (existingOpt) textInput.value = existingOpt.text || '';
       const cb = el('input', { type: 'checkbox' });
       if (existingOpt && rightSet.has(existingOpt.letter)) cb.checked = true;
+      cb.addEventListener('change', updateAnswerTypeHint);
       const row = el('div', { class: 'qf-opt-row' },
         el('span', { class: 'qf-opt-letter', text: letter }),
         textInput,
@@ -1657,15 +1763,16 @@
       );
       optWrap.appendChild(row);
     }
+    optWrap.appendChild(answerHint);
+    updateAnswerTypeHint();
 
     showPanel('qform');
   }
 
   function handleFormImageFile(file) {
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert('图片过大（超过 2MB）。请压缩后再上传，否则可能无法保存。');
-    }
+    const check = S.isAcceptableImageFile(file);
+    if (!check.ok) { toast(check.reason, 'bad'); return; }
     const reader = new FileReader();
     reader.onload = () => {
       state.formImage = reader.result;
@@ -1689,16 +1796,16 @@
   // Insert a set of common "base options" from a template pool into empty option slots.
   function insertBaseOptions() {
     const key = document.getElementById('qf-base-template').value;
-    if (!key || !DISTRACTOR_POOLS[key]) { alert('请先在左侧下拉中选择一组基础选项。'); return; }
+    if (!key || !DISTRACTOR_POOLS[key]) { toast('请先在左侧下拉中选择一组基础选项。', 'bad'); return; }
     const rows = [...document.querySelectorAll('#qf-options .qf-opt-row')].map(r => r.querySelector('.qf-opt-text'));
     const existing = new Set(rows.map(i => (i.value || '').trim()).filter(Boolean));
     const emptySlots = rows.filter(i => !(i.value || '').trim());
-    if (emptySlots.length === 0) { alert('选项已填满。如需替换，请先清空部分选项再插入。'); return; }
+    if (emptySlots.length === 0) { toast('选项已填满。如需替换，请先清空部分选项再插入。', 'bad'); return; }
     // take pool items not already present, up to the number of empty slots (cap at 4 for a typical question)
     const pool = DISTRACTOR_POOLS[key].filter(t => !existing.has(t));
     const want = Math.min(emptySlots.length, Math.max(4 - existing.size, 1), pool.length);
     for (let i = 0; i < want; i++) emptySlots[i].value = pool[i];
-    if (pool.length === 0) alert('该组选项已全部填入。');
+    if (pool.length === 0) toast('该组选项已全部填入。');
   }
 
   // Auto-fill plausible wrong distractors based on the checked (correct) option(s).
@@ -1713,7 +1820,7 @@
       .filter(Boolean);
 
     if (correctTexts.length === 0) {
-      alert('请先填写「正确选项」的内容并勾选其旁边的「正确」框，再点此按钮。');
+      toast('请先填写「正确选项」的内容并勾选其旁边的「正确」框，再点此按钮。', 'bad');
       return;
     }
 
@@ -1721,7 +1828,7 @@
     const target = filledCount >= 4 ? Math.min(filledCount, 5) : 4;
     let need = target - filledCount;
     if (need <= 0) {
-      alert('当前选项已经填满，无需自动补充。如需更多干扰项，请先清空部分选项。');
+      toast('当前选项已经填满，无需自动补充。如需更多干扰项，请先清空部分选项。');
       return;
     }
 
@@ -1736,7 +1843,7 @@
     candidates = [...new Set(candidates)].filter(c => !existing.has(c));
 
     if (!matched || candidates.length === 0) {
-      alert('未能根据当前答案匹配到形态相近的错误选项，请手动填写。\n（提示：答案用规范的形态学名称，如「中性分叶核粒细胞」「红细胞管型」「曲霉」等，自动匹配效果更好）');
+      toast('未能根据当前答案匹配到形态相近的错误选项，请手动填写。（提示：答案用规范的形态学名称，如「中性分叶核粒细胞」「红细胞管型」「曲霉」等，自动匹配效果更好）', 'bad');
       return;
     }
 
@@ -1759,7 +1866,7 @@
       }
     }
     if (need > 0) {
-      alert('已尽量补充，但匹配到的相近选项数量有限，剩余空位请手动填写。');
+      toast('已尽量补充，但匹配到的相近选项数量有限，剩余空位请手动填写。');
     }
   }
 
@@ -1771,7 +1878,7 @@
     const path = levels.length ? levels : ['其他'];
     const category = path[path.length - 1];   // leaf = short label
     const question = (document.getElementById('qf-question').value || '').trim();
-    if (!question) { alert('请填写题干'); return; }
+    if (!question) { toast('请填写题干', 'bad'); return; }
     const flagText = (document.getElementById('qf-flag').value || '').trim();
 
     const LETTERS = ['A', 'B', 'C', 'D', 'E'];
@@ -1783,7 +1890,7 @@
       const checks = rows.map(r => r.querySelector('input[type="checkbox"]').checked);
       options = state.formOptionImages.map(o => ({ letter: o.letter, text: o.text || '', image: o.image }));
       const correct = options.map((o, i) => (checks[i] ? o.letter : null)).filter(Boolean);
-      if (correct.length === 0) { alert('请至少勾选一个正确选项'); return; }
+      if (correct.length === 0) { toast('请至少勾选一个正确选项', 'bad'); return; }
       answer = correct.sort().join('');
     } else {
       const filled = [];
@@ -1792,9 +1899,9 @@
         const checked = r.querySelector('input[type="checkbox"]').checked;
         if (text) filled.push({ text, checked });
       });
-      if (filled.length < 2) { alert('请至少填写 A、B 两个选项的内容'); return; }
+      if (filled.length < 2) { toast('请至少填写 A、B 两个选项的内容', 'bad'); return; }
       const correctIdx = filled.map((o, i) => (o.checked ? i : -1)).filter(i => i >= 0);
-      if (correctIdx.length === 0) { alert('请至少勾选一个正确选项'); return; }
+      if (correctIdx.length === 0) { toast('请至少勾选一个正确选项', 'bad'); return; }
       options = filled.map((o, i) => ({ letter: LETTERS[i], text: o.text, image: null }));
       answer = correctIdx.map(i => LETTERS[i]).join('');
     }
@@ -1847,10 +1954,24 @@
   function bindEvents() {
     // mobile drawer
     const dt = document.getElementById('drawer-toggle');
-    if (dt) dt.onclick = toggleDrawer;
+    if (dt) { dt.onclick = toggleDrawer; dt.setAttribute('aria-expanded', 'false'); }
     const bd = document.getElementById('drawer-backdrop');
     if (bd) bd.onclick = closeDrawer;
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+    // 数据行动事件代理（替代 onclick="closeImgModal()" 之类的内联调用）
+    document.addEventListener('click', e => {
+      const t = e.target.closest('[data-action]');
+      if (!t) return;
+      const action = t.getAttribute('data-action');
+      if (action === 'closeImgModal') { e.stopPropagation(); closeImgModal(); }
+    });
+    // 抽屉打开/关闭时同步 aria-expanded
+    const app = document.getElementById('app');
+    if (app) {
+      const sync = () => { if (dt) dt.setAttribute('aria-expanded', app.classList.contains('drawer-open') ? 'true' : 'false'); };
+      new MutationObserver(sync).observe(app, { attributes: true, attributeFilter: ['class'] });
+    }
 
     // resume last session
     const resumeGo = () => { const s = loadSession(); if (s) restoreSession(s); else renderResumeUI(); };
@@ -1874,14 +1995,21 @@
       renderReview(); showPanel('review');
     };
     document.getElementById('clear-wrong-btn').onclick = () => {
-      if (confirm('确认清空所有错题？')) { saveWrongSet(new Set()); refreshWrongUI(); }
+      if (confirm('确认清空所有错题？') && saveWrongSet(new Set())) { refreshWrongUI(); }
     };
     document.getElementById('reset-stats-btn').onclick = () => {
-      if (confirm('确认重置所有答题统计？')) { saveStats({ answered: 0, correct: 0 }); refreshStatsUI(); }
+      if (confirm('确认重置所有答题统计？') && saveStats({ answered: 0, correct: 0 })) { refreshStatsUI(); }
     };
     document.getElementById('end-session-btn').onclick = () => {
-      if (confirm('确认结束本轮练习？')) { finishSession(); }   // shows score summary + clears resume
+      const total = state.sessionQuestions.length;
+      const cs = counts();
+      const answered = cs.correct + cs.wrong;
+      const unanswered = Math.max(0, total - answered);
+      const msg = `确认结束本轮？\n本轮共 ${total} 题，已答 ${answered}、未答 ${unanswered}。\n结束后会显示成绩，并清除「继续上次」记录。\n（只是想暂时离开、保留进度，请点「暂离」。）`;
+      if (confirm(msg)) { finishSession(); }
     };
+    const pauseBtn = document.getElementById('pause-session-btn');
+    if (pauseBtn) pauseBtn.onclick = () => { saveSession(); showPanel('welcome'); };   // 保留进度回主页
     document.getElementById('review-back-btn').onclick = () => { state.currentCategory = null; highlightSidebarCategory(); showPanel('welcome'); };
 
     // ---- 界面尺寸 (UI scale) ----
@@ -1967,13 +2095,15 @@
       const btn = document.getElementById('qnav-toggle');
       const open = nav.classList.toggle('open');
       btn.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
       btn.textContent = open ? '题号导航 ▴' : '题号导航 ▾';
+      if (open) centerCurrentQnav();   // 展开时把当前题滚到可视区
     };
 
     // Jump
     function doJump() {
       const v = parseInt(document.getElementById('jump-input').value, 10);
-      if (isNaN(v)) { alert('请输入题号'); return; }
+      if (isNaN(v)) { toast('请输入题号', 'bad'); return; }
       // The jump input is "第几题" within the session (1-based by current order)
       jumpToIndex(v - 1);
       document.getElementById('jump-input').value = '';
@@ -1984,6 +2114,7 @@
     });
 
     document.addEventListener('keydown', e => {
+      if (S.isImgModalOpen()) return;
       if (!document.getElementById('quiz').classList.contains('active')) return;
       if (document.activeElement && document.activeElement.id === 'jump-input') return;
       const key = e.key.toUpperCase();
@@ -1999,6 +2130,10 @@
   }
 
   function init() {
+    registerServiceWorker(new URL('../sw.js', window.location.href).toString());
+    window.addEventListener('storage', e => {
+      if ([K.taglibUser, K.taglibOverrides, K.taglibDeleted, K.taglibTaxo].includes(e.key)) invalidateTaglibCache();
+    });
     if (!window.QUESTIONS || !Array.isArray(window.QUESTIONS)) {
       document.body.textContent = '';
       document.body.appendChild(el('div', { style: 'padding:40px;text-align:center;color:#dc2626' },

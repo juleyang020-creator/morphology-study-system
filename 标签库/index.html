@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>形态学标签库</title>
+  <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="../manifest.webmanifest">
   <meta name="theme-color" content="#2563eb">
@@ -11,13 +12,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="形态学">
-  <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('../sw.js').catch(function(){});});}</script>
 </head>
 <body>
   <div id="app">
     <!-- mobile top bar (shown only on phones) -->
     <div class="mobile-topbar">
-      <button class="drawer-toggle" id="drawer-toggle" type="button" aria-label="打开菜单">☰</button>
+      <button class="drawer-toggle" id="drawer-toggle" type="button" aria-label="打开菜单" aria-expanded="false">☰</button>
       <span class="mtb-title">形态学标签库</span>
     </div>
     <div class="drawer-backdrop" id="drawer-backdrop"></div>
@@ -109,6 +109,9 @@
         <header class="quiz-header">
           <h2 style="margin:0;font-size:18px" id="detail-title">条目详情</h2>
           <div class="header-right">
+            <button class="btn btn-sm btn-ghost" id="detail-prev" title="上一条（←）">← 上一条</button>
+            <span class="muted-num" id="detail-pos" style="min-width:52px;text-align:center"></span>
+            <button class="btn btn-sm btn-ghost" id="detail-next" title="下一条（→）">下一条 →</button>
             <button class="btn btn-sm" id="detail-edit">编辑</button>
             <button class="btn btn-sm btn-danger-ghost" id="detail-delete">删除</button>
             <button class="btn btn-sm btn-ghost" id="detail-back">← 返回</button>
@@ -225,7 +228,9 @@
         </div>
 
         <div class="setup-card">
-          <div class="setup-title">② 范围（可多选筛选，留空＝全部）</div>
+          <div class="setup-title">② 范围（可多选筛选，留空＝全部）
+            <button class="btn btn-sm" id="setup-carry-btn" style="float:right;font-weight:400">↧ 沿用数据库当前筛选</button>
+          </div>
           <div class="setup-row"><span class="setup-label">系列</span><div id="setup-series" class="chip-row"></div></div>
           <div class="setup-row"><span class="setup-label">典型程度</span><div id="setup-typicality" class="chip-row"></div></div>
           <div class="setup-row"><span class="setup-label">具体分类</span><div id="setup-category" class="chip-row chip-row-wrap"></div></div>
@@ -300,11 +305,12 @@
     </main>
   </div>
 
-  <div id="img-modal" class="modal" role="dialog" aria-modal="true" aria-label="放大图片" onclick="closeImgModal()">
-    <button id="img-modal-close" type="button" class="img-modal-close" aria-label="关闭" onclick="event.stopPropagation();closeImgModal()">×</button>
+  <div id="img-modal" class="modal" role="dialog" aria-modal="true" aria-label="放大图片" data-action="closeImgModal">
+    <button id="img-modal-close" type="button" class="img-modal-close" aria-label="关闭" data-action="closeImgModal">×</button>
     <img id="modal-img" alt="放大">
   </div>
 
+  <script src="../shared/ui.js"></script>
   <script src="entries.js"></script>
   <script src="app.js"></script>
 </body>

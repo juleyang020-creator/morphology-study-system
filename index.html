@@ -17,21 +17,29 @@
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
       background:linear-gradient(160deg,#eef2ff 0%,#f5f7fb 45%,#faf5ff 100%);color:#1f2937;min-height:100vh;
-      display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px}
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:max(32px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}
     .hub-hero{text-align:center;margin-bottom:36px}
     .hub-hero h1{font-size:34px;letter-spacing:1px;background:linear-gradient(135deg,#2563eb,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent}
     .hub-hero p{color:#6b7280;margin-top:8px;font-size:15px}
     .cards{display:grid;grid-template-columns:repeat(2,minmax(280px,360px));gap:22px;width:100%;max-width:760px}
     @media(max-width:680px){.cards{grid-template-columns:1fr}}
-    .card{background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:26px;box-shadow:0 4px 24px rgba(0,0,0,.06);
-      text-decoration:none;color:inherit;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
-    .card:hover{transform:translateY(-3px);box-shadow:0 10px 34px rgba(37,99,235,.16);border-color:#c7d2fe}
-    .card .ic{font-size:42px;margin-bottom:12px}
+    .card{position:relative;overflow:hidden;background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px 26px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06),0 8px 28px rgba(0,0,0,.05);
+      text-decoration:none;color:inherit;display:flex;flex-direction:column;transition:transform .18s,box-shadow .18s,border-color .18s}
+    /* 顶部品牌色条：呼应两个模块的主色，提升识别度与份量 */
+    .card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px}
+    .card.practice::before{background:linear-gradient(90deg,#2563eb,#60a5fa)}
+    .card.lib::before{background:linear-gradient(90deg,#7c3aed,#c084fc)}
+    .card:hover{transform:translateY(-3px);box-shadow:0 12px 34px rgba(37,99,235,.16);border-color:#c7d2fe}
+    .card.lib:hover{box-shadow:0 12px 34px rgba(124,58,237,.16);border-color:#e9d5ff}
+    .card .ic{font-size:40px;margin-bottom:12px;line-height:1}
     .card h2{font-size:21px;margin-bottom:8px}
     .card p{color:#6b7280;font-size:14px;line-height:1.7;flex:1}
     .card .tags{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap}
     .card .tags span{background:#eef2ff;color:#2563eb;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:600}
-    .card .enter{margin-top:16px;align-self:flex-start;background:#2563eb;color:#fff;border-radius:9px;padding:9px 20px;font-weight:600;font-size:14px}
+    .card .enter{margin-top:18px;align-self:flex-start;background:#2563eb;color:#fff;border-radius:9px;padding:9px 20px;font-weight:600;font-size:14px;transition:gap .18s}
+    .card .enter .arr{display:inline-block;transition:transform .18s}
+    .card:hover .enter .arr{transform:translateX(4px)}
     .card.lib .enter{background:#7c3aed}
     .card.lib .tags span{background:#f3e8ff;color:#7c3aed}
     .hub-foot{margin-top:32px;color:#9ca3af;font-size:13px;text-align:center;max-width:620px;line-height:1.7}
@@ -51,18 +59,18 @@
   </div>
   <div class="cards">
     <a class="card practice" href="练习系统/index.html">
-      <div class="ic">📝</div>
+      <div class="ic" aria-hidden="true">📝</div>
       <h2>真题练习</h2>
       <p>2024 / 2025 北京市检验医学年会形态学大赛初赛题目，共 320 道带图真题。按细胞分类浏览、随机抽题、自定义组卷、错题库，支持自建题库与编辑。</p>
       <div class="tags"><span>320 真题</span><span>分类·组卷</span><span>错题库</span></div>
-      <span class="enter">进入练习 →</span>
+      <span class="enter" aria-hidden="true">进入练习 <span class="arr">→</span></span>
     </a>
     <a class="card lib" href="标签库/index.html">
-      <div class="ic">🔬</div>
+      <div class="ic" aria-hidden="true">🔬</div>
       <h2>细胞标签库</h2>
       <p>带 9 项标签的形态学图片数据库（编号·来源·分类·子分类·标签·典型程度·疾病·解说）。可上传图片入库、多维筛选检索，并从库中自动出题、随机测验。</p>
       <div class="tags"><span>图片数据库</span><span>上传标注</span><span>从库出题</span></div>
-      <span class="enter">进入标签库 →</span>
+      <span class="enter" aria-hidden="true">进入标签库 <span class="arr">→</span></span>
     </a>
   </div>
   <div id="pwa-install"><button id="pwa-install-btn" type="button">📲 安装到主屏幕</button></div>
@@ -72,8 +80,15 @@
   <script>
     // register service worker (offline support)
     if ('serviceWorker' in navigator) {
+      var hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController) { hadController = true; return; }
+        window.location.reload();
+      });
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function () {});
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          if (reg && reg.update) reg.update().catch(function () {});
+        }).catch(function () {});
       });
     }
     // Android / desktop Chrome: custom install button
@@ -94,11 +109,18 @@
     window.addEventListener('appinstalled', function () {
       document.getElementById('pwa-install').style.display = 'none';
     });
-    // iOS Safari: no install prompt → show manual hint (unless already installed)
+    // iOS Safari: no install prompt → show manual hint (unless already installed).
+    // 旧版用 navigator.userAgent 检测 iOS，iPadOS 16+ 会误判为 macOS；改用触屏+不支持 PWA 安装提示的特征组合。
     (function () {
-      var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
       var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-      if (isIOS && !standalone) document.getElementById('pwa-ios-hint').style.display = 'block';
+      if (standalone) return;
+      // 触屏 + Safari 风格（无 beforeinstallprompt）才显示提示
+      var isTouch = (navigator.maxTouchPoints || 0) > 0;
+      var isMacSafariLike = /Mac/.test(navigator.platform) && !window.MSStream;
+      var isIOSUA = /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Mac/.test(navigator.userAgent) && isTouch);
+      if ((isIOSUA || (isMacSafariLike && isTouch)) && !window.deferredPrompt) {
+        document.getElementById('pwa-ios-hint').style.display = 'block';
+      }
     })();
   </script>
 </body>

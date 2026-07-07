@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>2025年7月形态学比赛 - 练习系统</title>
+  <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="../manifest.webmanifest">
   <meta name="theme-color" content="#2563eb">
@@ -11,13 +12,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="形态学">
-  <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('../sw.js').catch(function(){});});}</script>
 </head>
 <body>
   <div id="app">
     <!-- mobile top bar (shown only on phones) -->
     <div class="mobile-topbar">
-      <button class="drawer-toggle" id="drawer-toggle" type="button" aria-label="打开菜单">☰</button>
+      <button class="drawer-toggle" id="drawer-toggle" type="button" aria-label="打开菜单" aria-expanded="false">☰</button>
       <span class="mtb-title">形态学练习系统</span>
     </div>
     <div class="drawer-backdrop" id="drawer-backdrop"></div>
@@ -149,6 +149,7 @@
               <span>题</span>
               <button class="btn btn-sm" id="jump-btn">跳转</button>
             </div>
+            <button class="btn btn-sm btn-ghost" id="pause-session-btn" title="回主页，进度保留，下次可继续">暂离</button>
             <button class="btn btn-sm btn-ghost" id="end-session-btn">结束本轮</button>
           </div>
         </header>
@@ -188,6 +189,7 @@
             <div class="stat"><div class="stat-num" id="result-total">0</div><div class="stat-label">总题数</div></div>
             <div class="stat ok"><div class="stat-num" id="result-correct">0</div><div class="stat-label">答对</div></div>
             <div class="stat bad"><div class="stat-num" id="result-wrong">0</div><div class="stat-label">答错</div></div>
+            <div class="stat"><div class="stat-num" id="result-unanswered">0</div><div class="stat-label">未答</div></div>
             <div class="stat"><div class="stat-num" id="result-rate">0%</div><div class="stat-label">正确率</div></div>
           </div>
           <div class="action-row" style="justify-content:center">
@@ -396,10 +398,12 @@
   </div>
 
   <!-- Image viewer modal -->
-  <div id="img-modal" class="modal" onclick="closeImgModal()">
+  <div id="img-modal" class="modal" role="dialog" aria-modal="true" aria-label="放大图片" data-action="closeImgModal">
+    <button id="img-modal-close" type="button" class="img-modal-close" aria-label="关闭" data-action="closeImgModal">×</button>
     <img id="modal-img" alt="放大查看">
   </div>
 
+  <script src="../shared/ui.js"></script>
   <script src="questions.js"></script>
   <!-- tag-library data (shared with the 标签库 module); enables 细胞分类图谱 + 从标签库建题 -->
   <script src="../标签库/entries.js"></script>
