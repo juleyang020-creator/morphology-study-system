@@ -812,7 +812,7 @@
   const TAGLIB_TOP = '标签库·细胞图谱';
   const TL_PREFIX2SERIES = { '0': '原始/幼稚细胞', 'N': '粒细胞系', 'R': '红细胞系', 'M': '单核细胞系', 'L': '淋巴细胞系', 'J': '浆细胞系', 'P': '巨核系/血小板' };
   const TL_SERIES_ORDER = ['原始/幼稚细胞', '粒细胞系', '红细胞系', '单核细胞系', '淋巴细胞系', '浆细胞系', '巨核系/血小板', '退化细胞', '非血液细胞', '病原体', '胞质碎片（浆质体）', '杂质', '其他', '未分类'];
-  const TL_TYP_LEVELS = ['典型', '一般', '不典型', '较难鉴别', '原幼细胞较难分类', '推测', '有争议'];
+  const TL_TYP_LEVELS = ['典型', '一般', '不典型', '较难鉴别', '原幼细胞', '原幼细胞较难分类', '推测', '有争议'];
 
   // Canonical, textbook-level morphology notes per cell type — supplements missing image info
   // and is shown in the gallery / as quiz feedback. (General cell-type description, not a claim

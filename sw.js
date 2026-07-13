@@ -6,7 +6,7 @@
  *  - 图片 fetch 失败返回 1x1 透明占位图（避免白屏叉）
  *  - skipWaiting + clients.claim 已有，配合 controllerchange 页面自动刷新
  */
-const VERSION = 'morph-pwa-v3';
+const VERSION = 'morph-pwa-v4';
 const SHELL_CACHE = 'morph-shell-' + VERSION;
 const IMG_CACHE = 'morph-img-' + VERSION;
 const IMG_CACHE_MAX = 700;
