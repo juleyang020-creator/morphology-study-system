@@ -6,7 +6,7 @@
  *  - 图片 fetch 失败返回 1x1 透明占位图（避免白屏叉）
  *  - skipWaiting + clients.claim 已有，配合 controllerchange 页面自动刷新
  */
-const VERSION = 'morph-pwa-v4';
+const VERSION = 'morph-pwa-v5';
 const SHELL_CACHE = 'morph-shell-' + VERSION;
 const IMG_CACHE = 'morph-img-' + VERSION;
 const IMG_CACHE_MAX = 700;
@@ -43,7 +43,7 @@ function trimImageCache(c) {
 }
 
 function imageUrlFromDataPath(source, imgPath) {
-  if (!/^(images|images_2024)\//i.test(imgPath)) return null;
+  if (!/^(images|images_x6)\//i.test(imgPath)) return null;
   return new URL(source.base + imgPath, self.registration.scope).toString();
 }
 
@@ -53,7 +53,7 @@ function discoverImageUrls() {
       if (!res || !res.ok) return [];
       return res.text();
     }).then(function (text) {
-      const re = /["']((?:images|images_2024)\/[^"']+\.(?:png|jpe?g|gif|webp|svg))["']/ig;
+      const re = /["']((?:images|images_x6)\/[^"']+\.(?:png|jpe?g|gif|webp|svg))["']/ig;
       const urls = [];
       let m;
       while ((m = re.exec(text))) {
@@ -105,7 +105,7 @@ self.addEventListener('activate', function (e) {
 });
 
 function isStaticImage(url) {
-  return /\/(images|images_2024|icons)\//.test(url.pathname) || /\.(png|jpe?g|gif|webp|svg)$/i.test(url.pathname);
+  return /\/(images|images_x6|icons)\//.test(url.pathname) || /\.(png|jpe?g|gif|webp|svg)$/i.test(url.pathname);
 }
 
 // 写入图片缓存 + FIFO 淘汰

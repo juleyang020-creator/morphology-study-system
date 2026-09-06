@@ -280,7 +280,7 @@
   }
 
   // ---- 安全的图片路径校验（防止 ../ 越权读取） ----
-  const SAFE_IMG_RE = /^(data:image\/|images\/|images_2024\/|\.\.\/标签库\/images\/)/i;
+  const SAFE_IMG_RE = /^(data:image\/|images\/|images_x6\/|\.\.\/标签库\/images\/)/i;
   const SAFE_TAGLIB_IMG_RE = /^(data:image\/|images\/)/i;
   function isSafeImgPath(s) {
     if (typeof s !== 'string' || !s) return false;
