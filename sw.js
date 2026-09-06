@@ -1,15 +1,16 @@
 /* 形态学学习系统 — service worker (offline support)
- * 改进点（对照 CHANGES.md）：
- *  - 预缓存列表补全：含两模块的 index.html / app.js / style.css / 数据 JS / 共享资源
- *  - 图片用独立 cache + FIFO 淘汰，并从数据文件中扫描图片路径做离线预缓存
- *  - 版本号绑定：每次发版 bump VERSION，activate 时清旧缓存
- *  - 图片 fetch 失败返回 1x1 透明占位图（避免白屏叉）
- *  - skipWaiting + clients.claim 已有，配合 controllerchange 页面自动刷新
+ * v6 更新策略（修复手机卡旧版）：
+ *  - install 只缓存 app shell（html/css/js，秒级完成）→ 新 SW 能立即激活
+ *  - 题库图片不再阻塞 install：activate 后后台分批补缓存（try/catch 单张失败不中断）
+ *  - 图片 fetch 保持 cache-first；外壳 stale-while-revalidate
+ *  - 版本号绑定：每次发版 bump VERSION，activate 清旧缓存
+ *  - 图片 fetch 失败返回 1x1 透明占位图
+ *  - skipWaiting + clients.claim + 页面 controllerchange 自动刷新
  */
-const VERSION = 'morph-pwa-v5';
+const VERSION = 'morph-pwa-v6';
 const SHELL_CACHE = 'morph-shell-' + VERSION;
 const IMG_CACHE = 'morph-img-' + VERSION;
-const IMG_CACHE_MAX = 700;
+const IMG_CACHE_MAX = 900;
 
 const PRECACHE = [
   './',
@@ -43,7 +44,7 @@ function trimImageCache(c) {
 }
 
 function imageUrlFromDataPath(source, imgPath) {
-  if (!/^(images|images_x6)\//i.test(imgPath)) return null;
+  if (!/^(images|images_x6)\/[^\/]/i.test(imgPath)) return null;
   return new URL(source.base + imgPath, self.registration.scope).toString();
 }
 
@@ -72,21 +73,33 @@ function discoverImageUrls() {
   });
 }
 
-function precacheImages() {
+// 后台分批补缓存图片：不阻塞 install/activate，失败静默跳过
+// 仅预缓存两个模块的 images/（约 70MB）；images_x6（新题库 400MB+）改为浏览时按需缓存，
+// 避免手机流量被静默消耗。看过的新题图片会自动进入缓存，下次离线可用。
+function precacheImagesBackground() {
   return discoverImageUrls().then(function (urls) {
+    const light = urls.filter(function (u) { return u.indexOf('/images_x6/') === -1; });
     return caches.open(IMG_CACHE).then(function (c) {
-      return Promise.allSettled(urls.map(function (url) {
-        return c.add(new Request(url, { cache: 'reload' }));
-      })).then(function () { return trimImageCache(c); });
+      let i = 0;
+      const BATCH = 4;
+      function step() {
+        if (i >= light.length) { trimImageCache(c); return Promise.resolve(); }
+        const batch = light.slice(i, i + BATCH);
+        i += BATCH;
+        return Promise.allSettled(batch.map(function (url) {
+          return c.add(new Request(url, { cache: 'reload' })).catch(function () {});
+        })).then(step);
+      }
+      return step();
     });
-  });
+  }).catch(function () {});
 }
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(SHELL_CACHE).then(function (c) {
       return c.addAll(PRECACHE);
-    }).then(precacheImages).then(function () { return self.skipWaiting(); })
+    }).then(function () { return self.skipWaiting(); })
   );
 });
 
@@ -101,6 +114,10 @@ self.addEventListener('activate', function (e) {
         }));
       })
       .then(function () { return self.clients.claim(); })
+      .then(function () {
+        // 外壳就绪后再后台补图片缓存（不阻塞激活）
+        precacheImagesBackground();
+      })
   );
 });
 
